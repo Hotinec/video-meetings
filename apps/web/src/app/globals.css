@@ -1,0 +1,9 @@
+@import 'tailwindcss';
+@import '@heroui/styles';
+
+/* Darken HeroUI's accent so white text on it meets WCAG AA (4.5:1). */
+:root,
+.light,
+[data-theme='light'] {
+  --accent: color-mix(in oklch, oklch(0.6204 0.195 253.83), black 10%);
+}
