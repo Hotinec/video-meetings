@@ -16,7 +16,8 @@
     "start:web": "npm run start --workspace=apps/web",
     "start:api": "npm run start --workspace=apps/api",
     "lint": "npm run lint --workspaces --if-present",
-    "format": "prettier --write \"apps/**/*.{ts,tsx,js,json}\""
+    "format": "prettier --write \"apps/**/*.{ts,tsx,js,json}\"",
+    "test:e2e:api": "npm run test:e2e --workspace=apps/api"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.0.0",
