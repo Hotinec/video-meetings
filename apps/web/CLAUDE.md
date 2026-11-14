@@ -48,3 +48,5 @@ Any frontend change (pages, components, styles, layout, copy, interactions) is o
 
 1. **Visual inspection via the Playwright MCP.** The dev servers are already running (web `:3002`, API `:3001`), so do not start or restart them; just open the existing URLs. Exercise the change with the Playwright MCP browser tools (`mcp__playwright__browser_*`: navigate, snapshot, click, fill, screenshot, evaluate), not by reading code alone: screenshot it at desktop and mobile (375px) widths, and trigger the relevant states (empty, filled, loading, error, success, keyboard focus).
 2. **Verify with the `ui-ux-pro-max` skill.** Invoke the skill and check the change against its rules (accessibility, touch targets, contrast, forms and feedback, responsive layout, motion). Measure contrast rather than eyeballing it. Fix every failure, or list it explicitly as a known gap for the user.
+
+All screenshots save to /screenshot folder
