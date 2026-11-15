@@ -1,7 +1,8 @@
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as request from 'supertest';
@@ -377,6 +378,24 @@ describe('Meeting files (e2e)', () => {
 
       expect(await prisma.meetingFile.findUnique({ where: { id } })).toBeNull();
       expect(existsSync(outside)).toBe(true);
+    });
+
+    it('204 - deletes the record even if removing the disk file fails', async () => {
+      const { id, onDisk } = await uploadRow('stuck.txt');
+      // A non-empty directory makes rm() throw, standing in for EPERM/EBUSY.
+      const dir = join(uploadDir, 'meetings', 'stuck');
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, 'inner.txt'), 'x');
+      await prisma.meetingFile.update({ where: { id }, data: { filePath: 'meetings/stuck' } });
+      const errors = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      await del(meetingId, id).expect(204);
+
+      expect(errors).toHaveBeenCalled();
+      errors.mockRestore();
+      expect(await prisma.meetingFile.findUnique({ where: { id } })).toBeNull();
+      expect(existsSync(join(dir, 'inner.txt'))).toBe(true);
+      await rm(onDisk, { force: true });
     });
   });
 });

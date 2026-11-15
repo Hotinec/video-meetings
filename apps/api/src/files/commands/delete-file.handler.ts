@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Inject, Logger, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { resolve, sep } from 'node:path';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -8,6 +8,8 @@ import { DeleteFileCommand } from './delete-file.command';
 
 @CommandHandler(DeleteFileCommand)
 export class DeleteFileHandler implements ICommandHandler<DeleteFileCommand> {
+  private readonly logger = new Logger(DeleteFileHandler.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(FILE_STORAGE) private readonly storage: FileStorage,
@@ -34,7 +36,13 @@ export class DeleteFileHandler implements ICommandHandler<DeleteFileCommand> {
     // Defense in depth: never remove anything outside the upload root.
     const root = getUploadDir();
     if (resolve(root, file.filePath).startsWith(root + sep)) {
-      await this.storage.remove(file.filePath);
+      try {
+        await this.storage.remove(file.filePath);
+      } catch (err) {
+        // The record is already gone, so failing the request would leave the client unable to
+        // retry (it would get a 404). Log the orphan instead.
+        this.logger.error(`Could not remove ${file.filePath} from disk`, (err as Error).stack);
+      }
     }
   }
 }
