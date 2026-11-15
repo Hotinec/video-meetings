@@ -5,9 +5,9 @@
 
 ## Decisions Made During Planning
 
-- **HTTP adapter:** the API runs on `@nestjs/platform-express`, so uploads use `FileInterceptor` (multer) with `limits.fileSize` and a `fileFilter`. This replaces the PRD's reference to Fastify multipart. There is no platform migration.
+- **HTTP adapter:** the API switches from `@nestjs/platform-express` to `@nestjs/platform-fastify`, as the PRD specifies, and uploads use `@fastify/multipart` (`limits.fileSize`, `limits.files: 1`). `FileInterceptor` is multer-only and is not used. The switch is small: `main.ts`, the e2e bootstraps and one `express` type import in `jwt-auth.guard.ts` are the only Express touchpoints.
 - **Access:** "participants" means any authenticated user (`JwtGuard`). The list and download endpoints need only a valid JWT and an existing meeting. Only the meeting host (`Meeting.hostId`) can delete. There is no participants model.
-- **IDs:** `Meeting.id` is an `Int`. `MeetingFile.id` is a UUID, because the disk path `uploads/meetings/{meetingId}/{fileId}/{filename}` needs an unguessable id. Stored filenames are sanitized to prevent path traversal.
+- **IDs:** `Meeting.id` is an `Int`. `MeetingFile.id` is a UUID, because the disk path `uploads/meetings/{meetingId}/{fileId}/…` needs an unguessable id. The original filename is kept in the database only, and the on-disk name is server-generated, which prevents path traversal. See [research-meeting-upload.md](./research-meeting-upload.md).
 - **Meeting page:** `apps/web` has no meeting page yet. Phase 4 adds a minimal `/meetings/[id]` page as the host for the Files panel.
 
 ## Implementation Phases
@@ -19,8 +19,9 @@
 **Tasks:**
 
 - [ ] Add the `MeetingFile` model (`id`, `meetingId` FK, `originalName`, `mimeType`, `size`, `filePath`, `uploadedAt`) to `schema.prisma` and create and apply the migration.
+- [ ] Switch the API to Fastify: replace `@nestjs/platform-express` and `@types/express` with `@nestjs/platform-fastify`, `fastify` and `@fastify/multipart`. Use `NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter())` with `listen(3001, '0.0.0.0')`. Change the `Request` type in `jwt-auth.guard.ts` to `FastifyRequest`. Update the e2e bootstraps to `createNestApplication<NestFastifyApplication>(new FastifyAdapter())` followed by `await app.init()` and `await app.getHttpAdapter().getInstance().ready()`. The existing auth and meetings e2e suites must still pass.
 - [ ] Add `UPLOAD_DIR` config (default `./uploads`), with the directory created at startup if missing. Add `uploads/` to `.gitignore`.
-- [ ] Implement `POST /meetings/:id/files` (`JwtGuard`, `FileInterceptor`, `UploadFileCommand` and handler). It writes to `{UPLOAD_DIR}/meetings/{meetingId}/{fileId}/{filename}` and saves the metadata. Return 404 if the meeting does not exist.
+- [ ] Register `@fastify/multipart` with `limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 }` (new config, default 100 MB). Implement `POST /meetings/:id/files` (`JwtGuard`, `UploadFileCommand` and handler). The controller reads the file with `req.file()` and streams it with `stream.pipeline` into `{UPLOAD_DIR}/tmp/{uuid}`. The handler then verifies the meeting exists (404 otherwise), creates the row, and `rename`s the file to `{UPLOAD_DIR}/meetings/{meetingId}/{fileId}/` with a server-generated name. Any failure removes the temp file. Put storage behind a small `FileStorage` interface with a `LocalFileStorage` implementation.
 - [ ] Implement `GET /meetings/:id/files` (`GetMeetingFilesQuery` and handler) returning the metadata list, newest first.
 - [ ] Write e2e tests in `test/meeting-files.e2e-spec.ts`: upload returns 201 with metadata; the file exists on disk; the list contains it; 401 without a token; 404 for an unknown meeting.
 
@@ -32,9 +33,9 @@
 **Impacts:** Backend
 **Tasks:**
 
-- [ ] Add a multer `fileFilter` allowing mp4, mov, webm, mp3, m4a, wav, pdf, docx, xlsx, pptx and txt (MIME type plus extension check). Add `limits.fileSize` of 100 MB. Map multer errors to a 400 with a clear message, and clean up any partial file on failure.
-- [ ] Implement `GET /meetings/:id/files/:fileId/download` (`GetMeetingFileQuery`) that streams from disk with `StreamableFile`, sets `Content-Type`, and sets `Content-Disposition: attachment; filename*=UTF-8''…`. Return 404 if the record or the disk file is missing, or if the file belongs to another meeting.
-- [ ] Write e2e tests: a disallowed type returns 400; a file over 100 MB returns 400 (use a small override of the limit via config or a generated buffer); download returns the same bytes and correct headers; 404 cases.
+- [ ] Validate the type against an allowlist of mp4, mov, webm, mp3, m4a, wav, pdf, docx, xlsx, pptx and txt: an early MIME type and extension check, then a magic-byte check of the temp file with `file-type` (`txt` is accepted by extension and MIME only). Map `FST_REQ_FILE_TOO_LARGE` and validation errors to a 400 with a clear message, and delete the temp file on failure. Set `defParamCharset: 'utf8'` (or equivalent) so non-ASCII filenames survive.
+- [ ] Implement `GET /meetings/:id/files/:fileId/download` (`GetMeetingFileQuery`) that streams from disk with `StreamableFile`, sets `Content-Type`, and sets `Content-Disposition: attachment; filename*=UTF-8''…` (plus an ASCII `filename=` fallback) and `X-Content-Type-Options: nosniff`. Return 404 if the record or the disk file is missing, or if the file belongs to another meeting.
+- [ ] Write e2e tests: a disallowed type returns 400; a file over 100 MB returns 400 (set `MAX_UPLOAD_BYTES` to a few KB in the test); a spoofed MIME type is rejected; a non-ASCII filename round-trips; download returns the same bytes and correct headers; 404 cases.
 
 **Definition of Done:** Invalid type or oversized uploads return 400 with a descriptive message and leave nothing on disk. Download returns the exact uploaded bytes with the correct `Content-Disposition`.
 
@@ -44,7 +45,7 @@
 **Impacts:** Backend
 **Tasks:**
 
-- [ ] Implement `DELETE /meetings/:id/files/:fileId` (`DeleteMeetingFileCommand` and handler). It checks `meeting.hostId === user.id` (403 otherwise) and removes the DB row and the file directory. A missing disk file must not block the DB delete.
+- [ ] Implement `DELETE /meetings/:id/files/:fileId` (`DeleteMeetingFileCommand` and handler). It checks `meeting.hostId === user.id` (403 otherwise), deletes the DB row first, then removes the file directory. A missing disk file must not block the DB delete.
 - [ ] Write e2e tests: the host gets 204 and the file is gone from the list and from disk; a non-host gets 403 and the file remains; an unknown file returns 404.
 
 **Definition of Done:** Only the host can delete. Delete removes both the record and the disk file. The backend part of the PRD is complete (all four endpoints).
@@ -55,6 +56,7 @@
 **Impacts:** Frontend
 **Tasks:**
 
+- [ ] Spike first: stream a 100 MB file up and down through the Next.js auth proxy and record whether it buffers or hits a body-size limit. If it does, use a Next `rewrites` entry or a direct API call.
 - [ ] Add a minimal `/meetings/[id]` page (auth-protected through the existing middleware) with a "Files" section or tab, and add a `lib/meeting-files.ts` API client. It goes through the existing auth proxy in `app/api`.
 - [ ] Build `FilesPanel`: a list showing name, human-readable size and upload date, with loading, empty and error states.
 - [ ] Add an "Upload File" button (hidden `<input type="file">`) that posts the file and refreshes the list, shows server validation errors as readable messages, and makes each file link to the `/download` endpoint.
@@ -83,7 +85,7 @@
 **Tasks:**
 
 - [ ] Write the E2E test for upload → display → download → deletion (API-level in `test/`, plus a Playwright run against the UI if it is available in the project).
-- [ ] Update `CLAUDE.md`, `apps/api/CLAUDE.md` and `apps/web/CLAUDE.md` (new module, `UPLOAD_DIR`, `uploads/` directory, new endpoints, new page).
+- [ ] Update `CLAUDE.md`, `apps/api/CLAUDE.md` and `apps/web/CLAUDE.md` (Fastify replaces Express, new module, `UPLOAD_DIR`, `MAX_UPLOAD_BYTES`, `uploads/` directory, new endpoints, new page, and the operational limits in the research doc).
 
 **Definition of Done:** The E2E test passes in a clean run, and lint and build succeed (`npm run lint`, `npm run build`).
 

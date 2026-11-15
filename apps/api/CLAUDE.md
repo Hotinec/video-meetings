@@ -200,3 +200,7 @@ Every module that uses the bus must import `CqrsModule` and list all handlers in
 - Part of the `@video-meetings/api` workspace
 - Linting and Prettier config inherited from monorepo root
 - Decorators enabled: `emitDecoratorMetadata`, `experimentalDecorators`
+
+## File upload
+
+Use this research for it: @docs/research-meeting-file-upload.md
