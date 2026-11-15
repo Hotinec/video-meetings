@@ -13,6 +13,7 @@ import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import '@fastify/multipart';
 import { FastifyRequest } from 'fastify';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { GetMeetingByIdQuery } from '../meeting/queries/get-meeting-by-id.query';
 import { UploadFileCommand } from './commands/upload-file.command';
 import { FILE_STORAGE, FileStorage } from './file-storage';
 import { MeetingFileView } from './meeting-file.view';
@@ -32,6 +33,9 @@ export class FilesController {
     @Param('id', ParseIntPipe) meetingId: number,
     @Req() req: FastifyRequest,
   ): Promise<MeetingFileView> {
+    // Reject unknown meetings before reading the body, so a bad request writes nothing to disk.
+    await this.queryBus.execute(new GetMeetingByIdQuery(meetingId));
+
     const part = await req.file();
     if (!part) throw new BadRequestException('No file uploaded');
 
