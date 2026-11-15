@@ -1,11 +1,12 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { setupApp } from '../src/app.setup';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 describe('Meetings (e2e)', () => {
-  let app: INestApplication;
+  let app: NestFastifyApplication;
   let prisma: PrismaService;
   let tokenA: string;
   let tokenB: string;
@@ -18,9 +19,10 @@ describe('Meetings (e2e)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+    app = moduleFixture.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
+    await setupApp(app);
     await app.init();
+    await app.getHttpAdapter().getInstance().ready();
 
     prisma = app.get(PrismaService);
     await prisma.meeting.deleteMany();
