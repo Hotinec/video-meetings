@@ -1,7 +1,7 @@
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test, TestingModule } from '@nestjs/testing';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as request from 'supertest';
@@ -283,6 +283,100 @@ describe('Meeting files (e2e)', () => {
       });
 
       await download(meetingId, up.body.id).expect(404);
+    });
+  });
+
+  describe('DELETE /meetings/:id/files/:fileId', () => {
+    const del = (id: number, fileId: string, auth: string | null = token) => {
+      const req = request(app.getHttpServer()).delete(`/meetings/${id}/files/${fileId}`);
+      return auth ? req.set('Authorization', `Bearer ${auth}`) : req;
+    };
+    const listIds = async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/meetings/${meetingId}/files`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      return res.body.map((f: { id: string }) => f.id);
+    };
+    const uploadRow = async (name = 'del.txt') => {
+      const up = await send(CONTENT, name, 'text/plain').expect(201);
+      const row = await prisma.meetingFile.findUniqueOrThrow({ where: { id: up.body.id } });
+      return { id: up.body.id as string, onDisk: join(uploadDir, row.filePath) };
+    };
+
+    it('204 - host deletes the file from the list, the database and the disk', async () => {
+      const { id, onDisk } = await uploadRow();
+      expect(existsSync(onDisk)).toBe(true);
+
+      const res = await del(meetingId, id).expect(204);
+      expect(res.text).toBe('');
+
+      expect(await listIds()).not.toContain(id);
+      expect(await prisma.meetingFile.findUnique({ where: { id } })).toBeNull();
+      expect(existsSync(onDisk)).toBe(false);
+    });
+
+    it('204 - still deletes the record when the file is already missing on disk', async () => {
+      const { id, onDisk } = await uploadRow('orphan.txt');
+      await rm(onDisk);
+
+      await del(meetingId, id).expect(204);
+      expect(await prisma.meetingFile.findUnique({ where: { id } })).toBeNull();
+    });
+
+    it('403 - a non-host cannot delete, and the file remains', async () => {
+      const { id, onDisk } = await uploadRow('keep.txt');
+      const other = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({ email: 'files-other@example.com', password: 'password123' });
+
+      await del(meetingId, id, other.body.token).expect(403);
+
+      expect(await listIds()).toContain(id);
+      expect(existsSync(onDisk)).toBe(true);
+    });
+
+    it('401 - rejects a request without a token', async () => {
+      const { id } = await uploadRow('auth.txt');
+      await del(meetingId, id, null).expect(401);
+      expect(await listIds()).toContain(id);
+    });
+
+    it('404 - unknown file', async () => {
+      await del(meetingId, '00000000-0000-0000-0000-000000000000').expect(404);
+      await del(meetingId, 'not-a-uuid').expect(404);
+    });
+
+    it('404 - unknown meeting', async () => {
+      await del(999999, '00000000-0000-0000-0000-000000000000').expect(404);
+    });
+
+    it('404 - file belongs to another meeting, and it remains', async () => {
+      const other = await request(app.getHttpServer())
+        .post('/meetings')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ title: 'Third meeting', date: '2026-11-03T10:00:00.000Z' });
+      const { id, onDisk } = await uploadRow('cross.txt');
+
+      await del(other.body.id, id).expect(404);
+
+      expect(await listIds()).toContain(id);
+      expect(existsSync(onDisk)).toBe(true);
+    });
+
+    it('204 - never removes anything outside the upload root', async () => {
+      const outside = join(uploadDir, '..', 'outside.txt');
+      await writeFile(outside, 'keep me');
+      const { id } = await uploadRow('trap.txt');
+      await prisma.meetingFile.update({
+        where: { id },
+        data: { filePath: '../outside.txt' },
+      });
+
+      await del(meetingId, id).expect(204);
+
+      expect(await prisma.meetingFile.findUnique({ where: { id } })).toBeNull();
+      expect(existsSync(outside)).toBe(true);
     });
   });
 });
