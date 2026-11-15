@@ -16,7 +16,24 @@ describe('Meeting files (e2e)', () => {
   let token: string;
   let meetingId: number;
 
+  const MAX_BYTES = 1024;
   const CONTENT = Buffer.from('hello meeting file');
+  const PNG = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.alloc(64),
+  ]);
+  const PDF = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n');
+
+  const send = (content: Buffer, filename: string, contentType: string) =>
+    request(app.getHttpServer())
+      .post(`/meetings/${meetingId}/files`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', content, { filename, contentType });
+
+  const expectNothingLeftOnDisk = async (filesBefore: number) => {
+    expect(readdirSync(join(uploadDir, 'tmp'))).toEqual([]);
+    expect(await prisma.meetingFile.count()).toBe(filesBefore);
+  };
 
   const upload = (id: number | string, auth: string | null = token) => {
     const req = request(app.getHttpServer())
@@ -29,6 +46,7 @@ describe('Meeting files (e2e)', () => {
     // Start from a path that does not exist, to prove the app creates it on startup.
     uploadDir = join(await mkdtemp(join(tmpdir(), 'vm-uploads-')), 'uploads');
     process.env.UPLOAD_DIR = uploadDir;
+    process.env.MAX_UPLOAD_BYTES = String(MAX_BYTES);
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -62,6 +80,7 @@ describe('Meeting files (e2e)', () => {
     await prisma.user.deleteMany();
     await app.close();
     delete process.env.UPLOAD_DIR;
+    delete process.env.MAX_UPLOAD_BYTES;
     await rm(join(uploadDir, '..'), { recursive: true, force: true });
   });
 
@@ -139,6 +158,131 @@ describe('Meeting files (e2e)', () => {
         .get('/meetings/999999/files')
         .set('Authorization', `Bearer ${token}`)
         .expect(404);
+    });
+  });
+
+  describe('POST /meetings/:id/files - validation', () => {
+    it('201 - accepts a real PDF', async () => {
+      const res = await send(PDF, 'minutes.pdf', 'application/pdf').expect(201);
+      expect(res.body.mimeType).toBe('application/pdf');
+    });
+
+    it('400 - rejects a disallowed type', async () => {
+      const before = await prisma.meetingFile.count();
+      const res = await send(
+        Buffer.from('MZ binary'),
+        'setup.exe',
+        'application/octet-stream',
+      ).expect(400);
+      expect(res.body.message).toMatch(/not allowed/i);
+      await expectNothingLeftOnDisk(before);
+    });
+
+    it('400 - rejects a MIME type that does not match the extension', async () => {
+      const before = await prisma.meetingFile.count();
+      await send(PDF, 'minutes.pdf', 'image/png').expect(400);
+      await expectNothingLeftOnDisk(before);
+    });
+
+    it('400 - rejects a spoofed file: PNG content named .pdf with a PDF MIME type', async () => {
+      const before = await prisma.meetingFile.count();
+      const res = await send(PNG, 'fake.pdf', 'application/pdf').expect(400);
+      expect(res.body.message).toMatch(/content does not match/i);
+      await expectNothingLeftOnDisk(before);
+    });
+
+    it('400 - rejects binary content named .txt', async () => {
+      const before = await prisma.meetingFile.count();
+      await send(PNG, 'fake.txt', 'text/plain').expect(400);
+      await expectNothingLeftOnDisk(before);
+    });
+
+    it('400 - rejects a file over the size limit and leaves nothing on disk', async () => {
+      const before = await prisma.meetingFile.count();
+      const res = await send(Buffer.alloc(MAX_BYTES * 4, 'a'), 'big.txt', 'text/plain').expect(400);
+      expect(res.body.message).toMatch(/too large/i);
+      await expectNothingLeftOnDisk(before);
+    });
+
+    it('201 - keeps a non-ASCII filename intact', async () => {
+      const res = await send(CONTENT, 'Протокол встречи.txt', 'text/plain').expect(201);
+      expect(res.body.originalName).toBe('Протокол встречи.txt');
+    });
+  });
+
+  describe('GET /meetings/:id/files/:fileId/download', () => {
+    const download = (id: number, fileId: string, auth: string | null = token) => {
+      const req = request(app.getHttpServer()).get(`/meetings/${id}/files/${fileId}/download`);
+      return auth ? req.set('Authorization', `Bearer ${auth}`) : req;
+    };
+
+    it('200 - returns the exact uploaded bytes with attachment headers', async () => {
+      const bytes = Buffer.concat([PDF, Buffer.from([0, 255, 128, 7])]);
+      const up = await send(bytes, 'report.pdf', 'application/pdf').expect(201);
+
+      const res = await download(meetingId, up.body.id)
+        .buffer(true)
+        .parse((r, cb) => {
+          const chunks: Buffer[] = [];
+          r.on('data', (c: Buffer) => chunks.push(c));
+          r.on('end', () => cb(null, Buffer.concat(chunks)));
+        })
+        .expect(200);
+
+      expect((res.body as Buffer).equals(bytes)).toBe(true);
+      expect(res.headers['content-type']).toContain('application/pdf');
+      expect(res.headers['content-length']).toBe(String(bytes.length));
+      expect(res.headers['content-disposition']).toBe(
+        `attachment; filename="report.pdf"; filename*=UTF-8''report.pdf`,
+      );
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+    });
+
+    it('200 - encodes a non-ASCII filename with an ASCII fallback', async () => {
+      const up = await send(CONTENT, 'Протокол.txt', 'text/plain').expect(201);
+      const res = await download(meetingId, up.body.id).expect(200);
+
+      const header = res.headers['content-disposition'];
+      expect(header).toContain(`filename*=UTF-8''${encodeURIComponent('Протокол.txt')}`);
+      expect(header).toMatch(/filename="[\x20-\x7e]+"/);
+    });
+
+    it('401 - rejects a request without a token', async () => {
+      const up = await send(CONTENT, 'a.txt', 'text/plain').expect(201);
+      await download(meetingId, up.body.id, null).expect(401);
+    });
+
+    it('404 - unknown file', async () => {
+      await download(meetingId, '00000000-0000-0000-0000-000000000000').expect(404);
+      await download(meetingId, 'not-a-uuid').expect(404);
+    });
+
+    it('404 - file belongs to another meeting', async () => {
+      const other = await request(app.getHttpServer())
+        .post('/meetings')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ title: 'Other meeting', date: '2026-11-02T10:00:00.000Z' });
+      const up = await send(CONTENT, 'b.txt', 'text/plain').expect(201);
+
+      await download(other.body.id, up.body.id).expect(404);
+    });
+
+    it('404 - record exists but the file is missing on disk', async () => {
+      const up = await send(CONTENT, 'gone.txt', 'text/plain').expect(201);
+      const row = await prisma.meetingFile.findUniqueOrThrow({ where: { id: up.body.id } });
+      await rm(join(uploadDir, row.filePath));
+
+      await download(meetingId, up.body.id).expect(404);
+    });
+
+    it('404 - refuses a stored path that escapes the upload root', async () => {
+      const up = await send(CONTENT, 'trap.txt', 'text/plain').expect(201);
+      await prisma.meetingFile.update({
+        where: { id: up.body.id },
+        data: { filePath: '../../../etc/hosts' },
+      });
+
+      await download(meetingId, up.body.id).expect(404);
     });
   });
 });
