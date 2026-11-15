@@ -7,18 +7,24 @@ import {
   ParseIntPipe,
   Post,
   Req,
+  Res,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import '@fastify/multipart';
-import { FastifyRequest } from 'fastify';
+import { createReadStream } from 'node:fs';
+import { FastifyReply, FastifyRequest } from 'fastify';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetMeetingByIdQuery } from '../meeting/queries/get-meeting-by-id.query';
+import { attachmentHeader } from './content-disposition';
 import { describeAllowedTypes, isAllowedByNameAndMime } from './allowed-types';
 import { UploadFileCommand } from './commands/upload-file.command';
 import { FILE_STORAGE, FileStorage, TempFile } from './file-storage';
 import { getMaxUploadBytes } from './upload.config';
 import { MeetingFileView } from './meeting-file.view';
+import { MeetingFileDownload } from './queries/get-meeting-file.handler';
+import { GetMeetingFileQuery } from './queries/get-meeting-file.query';
 import { GetMeetingFilesQuery } from './queries/get-meeting-files.query';
 
 @Controller('meetings/:id/files')
@@ -76,5 +82,23 @@ export class FilesController {
   @Get()
   list(@Param('id', ParseIntPipe) meetingId: number): Promise<MeetingFileView[]> {
     return this.queryBus.execute(new GetMeetingFilesQuery(meetingId));
+  }
+
+  @Get(':fileId/download')
+  async download(
+    @Param('id', ParseIntPipe) meetingId: number,
+    @Param('fileId') fileId: string,
+    @Res({ passthrough: true }) res: FastifyReply,
+  ): Promise<StreamableFile> {
+    const file: MeetingFileDownload = await this.queryBus.execute(
+      new GetMeetingFileQuery(meetingId, fileId),
+    );
+
+    // Always an attachment and never sniffed, so an uploaded HTML/SVG can't run in the browser.
+    res.header('Content-Type', file.mimeType);
+    res.header('Content-Length', file.size);
+    res.header('Content-Disposition', attachmentHeader(file.originalName));
+    res.header('X-Content-Type-Options', 'nosniff');
+    return new StreamableFile(createReadStream(file.absolutePath));
   }
 }
