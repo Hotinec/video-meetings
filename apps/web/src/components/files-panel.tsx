@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Spinner } from '@heroui/react';
-import { FileIcon, UploadIcon } from '@/components/icons';
+import { FileIcon, TrashIcon, UploadIcon } from '@/components/icons';
 import { fileKind } from '@/lib/file-kind';
 import { ACCEPT, validateFile } from '@/lib/file-rules';
 import {
+  deleteMeetingFile,
   downloadUrl,
   FilesUnauthorizedError,
   formatFileSize,
@@ -13,6 +14,14 @@ import {
   uploadMeetingFile,
   type MeetingFile,
 } from '@/lib/meeting-files';
+
+/** HeroUI's stock danger colours fall short of 4.5:1, so darken them. */
+const DANGER_TEXT = 'color-mix(in oklch, var(--danger), black 35%)';
+const DANGER_SOLID_STYLE = { background: DANGER_TEXT, color: 'white' };
+const DANGER_SOFT_STYLE = {
+  background: 'color-mix(in oklch, var(--danger) 12%, white)',
+  color: DANGER_TEXT,
+};
 
 const dateFormat = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' });
 
@@ -25,14 +34,20 @@ function signOut() {
   window.location.href = '/api/auth/logout';
 }
 
-export function FilesPanel({ meetingId }: { meetingId: number }) {
+export function FilesPanel({ meetingId, isHost = false }: { meetingId: number; isHost?: boolean }) {
   const [state, setState] = useState<State>({ status: 'loading' });
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploaded, setUploaded] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState<{ name: string; percent: number } | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleted, setDeleted] = useState<string | null>(null);
+  const [restoreFocusId, setRestoreFocusId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const uploadButtonRef = useRef<HTMLButtonElement>(null);
   // Every list request takes a number; only the newest one may write state, so a slow
   // older response can't overwrite a fresher list.
   const latestRequest = useRef(0);
@@ -64,6 +79,8 @@ export function FilesPanel({ meetingId }: { meetingId: number }) {
     if (isUploading) return;
     setUploadError(null);
     setUploaded(null);
+    setDeleted(null);
+    setDeleteError(null);
 
     // Same checks as the API, so an obviously bad file never leaves the browser.
     const problem = validateFile(file);
@@ -107,6 +124,32 @@ export function FilesPanel({ meetingId }: { meetingId: number }) {
     }
   };
 
+  const removeFile = async (target: MeetingFile) => {
+    setDeleteError(null);
+    setDeleted(null);
+    setUploaded(null);
+    setDeletingId(target.id);
+    try {
+      await deleteMeetingFile(meetingId, target.id);
+    } catch (err) {
+      setDeletingId(null);
+      if (err instanceof FilesUnauthorizedError) return signOut();
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete the file');
+      return;
+    }
+    // Invalidate in-flight list requests so one that started before the delete can't bring the file back.
+    latestRequest.current++;
+    setState((prev) =>
+      prev.status === 'ready'
+        ? { status: 'ready', files: prev.files.filter((f) => f.id !== target.id) }
+        : prev,
+    );
+    setDeletingId(null);
+    setConfirmingId(null);
+    setDeleted(target.originalName);
+    uploadButtonRef.current?.focus(); // the deleted row's controls are gone
+  };
+
   const handleSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
     const file = input.files?.[0];
@@ -142,9 +185,7 @@ export function FilesPanel({ meetingId }: { meetingId: number }) {
   } else if (state.status === 'error') {
     list = (
       <div role="alert" className="flex flex-wrap items-center gap-3 text-sm">
-        <span style={{ color: 'color-mix(in oklch, var(--danger), black 35%)' }}>
-          {state.message}
-        </span>
+        <span style={{ color: DANGER_TEXT }}>{state.message}</span>
         <Button variant="secondary" size="lg" className="min-h-11" onPress={load}>
           Try again
         </Button>
@@ -177,13 +218,69 @@ export function FilesPanel({ meetingId }: { meetingId: number }) {
                 {file.originalName}
               </span>
             </a>
-            <span
-              className="flex items-center gap-3 text-sm shrink-0"
-              style={{ color: 'var(--muted)' }}
-            >
-              <span>{formatFileSize(file.size)}</span>
-              <time dateTime={file.uploadedAt}>{dateFormat.format(new Date(file.uploadedAt))}</time>
-            </span>
+            {confirmingId === file.id ? (
+              <div
+                role="group"
+                aria-label={`Confirm deleting ${file.originalName}`}
+                className="flex flex-wrap items-center gap-2 shrink-0"
+              >
+                <span className="text-sm">Delete this file?</span>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  className="min-h-11"
+                  autoFocus
+                  isDisabled={deletingId === file.id}
+                  onPress={() => {
+                    setRestoreFocusId(file.id); // hand focus back to the button that opened this
+                    setConfirmingId(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  size="lg"
+                  className="min-h-11"
+                  style={DANGER_SOLID_STYLE}
+                  isDisabled={deletingId === file.id}
+                  onPress={() => removeFile(file)}
+                >
+                  {deletingId === file.id ? <Spinner size="sm" color="current" /> : <TrashIcon />}
+                  {deletingId === file.id ? 'Deleting…' : 'Delete'}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 w-full sm:w-auto sm:shrink-0">
+                <span
+                  className="flex items-center gap-3 text-sm mr-auto sm:mr-0"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  <span>{formatFileSize(file.size)}</span>
+                  <time dateTime={file.uploadedAt}>
+                    {dateFormat.format(new Date(file.uploadedAt))}
+                  </time>
+                </span>
+                {isHost && (
+                  <Button
+                    variant="danger-soft"
+                    size="lg"
+                    className="min-h-11"
+                    style={DANGER_SOFT_STYLE}
+                    autoFocus={restoreFocusId === file.id}
+                    aria-label={`Delete ${file.originalName}`}
+                    onPress={() => {
+                      setDeleteError(null);
+                      setRestoreFocusId(null);
+                      setConfirmingId(file.id);
+                    }}
+                  >
+                    <TrashIcon />
+                    Delete
+                  </Button>
+                )}
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -206,7 +303,9 @@ export function FilesPanel({ meetingId }: { meetingId: number }) {
         onDrop={handleDrop}
         className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed p-6 text-center transition-colors"
         style={{
-          borderColor: isDragging ? 'var(--accent)' : 'var(--border)',
+          borderColor: isDragging
+            ? 'var(--accent)'
+            : 'color-mix(in oklch, var(--muted) 85%, white)',
           background: isDragging
             ? 'color-mix(in oklch, var(--accent) 8%, transparent)'
             : 'transparent',
@@ -222,6 +321,7 @@ export function FilesPanel({ meetingId }: { meetingId: number }) {
           tabIndex={-1}
         />
         <Button
+          ref={uploadButtonRef}
           variant="primary"
           size="lg"
           className="min-h-11"
@@ -262,12 +362,16 @@ export function FilesPanel({ meetingId }: { meetingId: number }) {
       <div role="status" className="text-sm empty:hidden" style={{ color: 'var(--muted)' }}>
         {uploaded && `Uploaded ${uploaded}`}
       </div>
+      <div role="status" className="text-sm empty:hidden" style={{ color: 'var(--muted)' }}>
+        {deleted && `Deleted ${deleted}`}
+      </div>
+      {deleteError && (
+        <div role="alert" className="text-sm" style={{ color: DANGER_TEXT }}>
+          {deleteError}
+        </div>
+      )}
       {uploadError && (
-        <div
-          role="alert"
-          className="text-sm"
-          style={{ color: 'color-mix(in oklch, var(--danger), black 35%)' }}
-        >
+        <div role="alert" className="text-sm" style={{ color: DANGER_TEXT }}>
           {uploadError}
         </div>
       )}

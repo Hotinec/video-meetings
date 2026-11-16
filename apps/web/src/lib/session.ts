@@ -34,3 +34,13 @@ export function emailFromToken(token: string): string | null {
     return null;
   }
 }
+
+/** Reads the user id (`sub`) for display decisions only (e.g. showing a delete button); the API enforces ownership. */
+export function userIdFromToken(token: string): number | null {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+    return typeof payload.sub === 'number' ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}

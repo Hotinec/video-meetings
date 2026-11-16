@@ -29,10 +29,11 @@ src/
     signup/      # registration page
     meetings/[id]/ # meeting page (server component): title, date and the Files section
     api/auth/    # route handlers (login, register, logout) that proxy to the API and manage the cookie
-    api/meetings/[id]/files/  # proxy routes: GET list, POST upload (streams the body), [fileId]/download
+    api/meetings/[id]/files/  # proxy routes: GET list, POST upload (streams the body), [fileId] DELETE, [fileId]/download
   components/    # shared UI (icons, AuthShell, SectionCard, LogoutButton, FilesPanel)
   lib/           # session.ts (cookie + API_URL), auth-proxy.ts, auth.ts (client calls), meetings.ts,
-                 # files-proxy.ts (server: forwards to the API with the cookie's JWT), meeting-files.ts (browser client)
+                 # files-proxy.ts (server: forwards to the API with the cookie's JWT), meeting-files.ts (browser client),
+                 # file-rules.ts (allowlist + size cap), file-kind.ts (icon kind), meeting-id.ts
   middleware.ts  # redirects to /login when the `token` cookie is missing (matches / and /meetings/*)
 vitest.config.mts, vitest.setup.ts  # test config (jsdom, `@` alias, jest-dom matchers)
 ```
@@ -45,9 +46,12 @@ vitest.config.mts, vitest.setup.ts  # test config (jsdom, `@` alias, jest-dom ma
 
 ## Meeting files
 
-- `FilesPanel` (client component) lists a meeting's files with loading, empty and error (retry) states, and has an "Upload File" button (hidden `<input type="file">`, `accept` limited to the allowed types). Server validation messages show in a `role="alert"` region; each file name links to `/download`.
-- The browser only talks to same-origin `/api/meetings/:id/files` routes. They add the `Authorization` header from the httpOnly cookie, so the JWT never reaches client JS. The upload route streams the multipart body straight to the API, which does all validation.
-- Tests: `src/components/files-panel.test.tsx` (list, empty, error + retry, upload success, validation error) and `src/lib/meeting-files.test.ts`. They mock `fetch`.
+- `FilesPanel` (client component, `isHost` prop) lists a meeting's files with loading, empty and error (retry) states. Each row has an icon for its kind (`lib/file-kind.ts` + `FileIcon` in `components/icons.tsx`), the name as a `/download` link, size and date.
+- **Upload:** a drag-and-drop zone around an "Upload File" button (hidden `<input type="file">`; the button stays the keyboard path). `lib/file-rules.ts` mirrors the API's allowlist and 100 MB default cap and runs before anything is sent; the API remains the authority. One file at a time. Uploads use `XMLHttpRequest` (`lib/meeting-files.ts`) because `fetch` can't report upload progress; a `role="progressbar"` follows it. Errors show in a `role="alert"` region, success in `role="status"`.
+- **Delete:** only the host sees a Delete button. The page compares `meeting.hostId` with the `sub` claim of the JWT (`userIdFromToken`, display only; the API returns 403 for anyone else). Delete asks for inline confirmation (Cancel is focused), then removes the row without reloading; an already-gone file (404) counts as deleted.
+- The browser only talks to same-origin `/api/meetings/:id/files` routes (list, upload, `[fileId]` DELETE, `[fileId]/download`). They add the `Authorization` header from the httpOnly cookie, so the JWT never reaches client JS. The upload route streams the multipart body straight to the API.
+- Stock HeroUI danger colours fail 4.5:1, so the delete buttons and error text use a darkened `--danger` (see `DANGER_TEXT` in the panel).
+- Tests (`npm test`, all mock `fetch` / `XMLHttpRequest`; `src/test/fake-xhr.ts` drives progress by hand): `files-panel.test.tsx` (list, states, upload, progress, drop zone, delete), `meeting-files.test.ts`, `file-rules.test.ts`, `file-kind.test.ts`, `meeting-id.test.ts`.
 
 ## Notes
 

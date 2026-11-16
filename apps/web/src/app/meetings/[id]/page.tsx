@@ -10,7 +10,7 @@ import {
   type Meeting,
 } from '@/lib/meetings';
 import { parseMeetingId } from '@/lib/meeting-id';
-import { getToken } from '@/lib/session';
+import { getToken, userIdFromToken } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,7 +58,7 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
         </header>
 
         <SectionCard title="Files" description="Documents and recordings shared in this meeting">
-          <FilesPanel meetingId={meeting.id} />
+          <FilesPanel meetingId={meeting.id} isHost={userIdFromToken(token) === meeting.hostId} />
         </SectionCard>
       </div>
     </main>

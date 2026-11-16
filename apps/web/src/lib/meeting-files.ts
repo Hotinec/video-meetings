@@ -63,6 +63,15 @@ export function uploadMeetingFile(
   });
 }
 
+/** Deletes a file. A file that is already gone counts as deleted. */
+export async function deleteMeetingFile(meetingId: number, fileId: string): Promise<void> {
+  const res = await fetch(`${base(meetingId)}/${encodeURIComponent(fileId)}`, {
+    method: 'DELETE',
+  });
+  if (res.ok || res.status === 404) return;
+  throw await failure(res, 'Failed to delete the file');
+}
+
 export const downloadUrl = (meetingId: number, fileId: string) =>
   `${base(meetingId)}/${encodeURIComponent(fileId)}/download`;
 
