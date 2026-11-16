@@ -72,7 +72,7 @@
 - [x] Show an upload progress bar (`XMLHttpRequest` `upload.onprogress`, since `fetch` does not report upload progress).
 - [x] Add MIME-type file icons (video, audio, PDF, document, spreadsheet, presentation, text, fallback) in `components/icons.tsx`.
 - [x] Show a delete button only to the meeting host. It asks for confirmation, then removes the item from the list without a page reload.
-- [ ] Add tests: the drop zone accepts and rejects files, the progress bar appears during upload, the delete button is hidden for non-hosts, and the item is removed after delete.
+- [x] Add tests: the drop zone accepts and rejects files, the progress bar appears during upload, the delete button is hidden for non-hosts, and the item is removed after delete.
 
 **Definition of Done:** All frontend items in the PRD's Definition of Done work in the browser.
 

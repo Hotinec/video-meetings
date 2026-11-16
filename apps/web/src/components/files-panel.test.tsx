@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FilesPanel } from './files-panel';
@@ -22,8 +22,11 @@ const json = (body: unknown, status = 200) =>
 function mockApi(handlers: {
   list: () => Promise<Response>;
   upload?: () => { status: number; body: unknown };
+  remove?: () => Promise<Response>;
 }) {
-  const fetchMock = vi.fn(() => handlers.list());
+  const fetchMock = vi.fn((_url: string, init?: RequestInit) =>
+    init?.method === 'DELETE' ? handlers.remove!() : handlers.list(),
+  );
   vi.stubGlobal('fetch', fetchMock);
   installFakeXHR(handlers.upload ?? null);
   return fetchMock;
@@ -234,5 +237,204 @@ describe('FilesPanel', () => {
     act(() => FakeXHR.instances[0].fail());
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Cannot reach the server');
+  });
+
+  describe('drop zone', () => {
+    const zone = () => screen.getByTestId('drop-zone');
+    const dropFiles = (...files: File[]) => fireEvent.drop(zone(), { dataTransfer: { files } });
+
+    const ready = async () => {
+      mockApi({
+        list: () => json([]),
+        upload: () => ({ status: 201, body: file({ originalName: 'dropped.pdf' }) }),
+      });
+      render(<FilesPanel meetingId={7} />);
+      await screen.findByText('No files yet.');
+    };
+
+    it('accepts a dropped file of an allowed type and uploads it', async () => {
+      await ready();
+      const dropped = new File(['%PDF'], 'dropped.pdf', { type: 'application/pdf' });
+
+      dropFiles(dropped);
+
+      expect(await screen.findByText('Uploaded dropped.pdf')).toBeInTheDocument();
+      expect(FakeXHR.instances).toHaveLength(1);
+      expect((FakeXHR.instances[0].body as FormData).get('file')).toBe(dropped);
+    });
+
+    it('rejects a dropped file of a disallowed type without sending anything', async () => {
+      await ready();
+
+      dropFiles(new File(['MZ'], 'setup.exe'));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/File type not allowed/);
+      expect(FakeXHR.instances).toHaveLength(0);
+    });
+
+    it('rejects a dropped file over 100 MB without sending anything', async () => {
+      await ready();
+      const big = new File(['x'], 'huge.mp4', { type: 'video/mp4' });
+      Object.defineProperty(big, 'size', { value: 100 * 1024 * 1024 + 1 });
+
+      dropFiles(big);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'File is too large. Maximum size is 100 MB',
+      );
+      expect(FakeXHR.instances).toHaveLength(0);
+    });
+
+    it('rejects several dropped files at once', async () => {
+      await ready();
+
+      dropFiles(new File(['a'], 'a.txt'), new File(['b'], 'b.txt'));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Please upload one file at a time',
+      );
+      expect(FakeXHR.instances).toHaveLength(0);
+    });
+
+    it('also checks files chosen with the button', async () => {
+      await ready();
+
+      await userEvent.upload(
+        screen.getByLabelText('Choose a file to upload'),
+        new File(['MZ'], 'setup.exe'),
+        { applyAccept: false },
+      );
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/File type not allowed/);
+      expect(FakeXHR.instances).toHaveLength(0);
+    });
+
+    it('highlights while a file is dragged over and clears on leave', async () => {
+      await ready();
+      expect(zone()).not.toHaveAttribute('data-dragging');
+
+      fireEvent.dragEnter(zone());
+      expect(zone()).toHaveAttribute('data-dragging');
+
+      fireEvent.dragLeave(zone(), { relatedTarget: document.body });
+      expect(zone()).not.toHaveAttribute('data-dragging');
+    });
+  });
+
+  describe('delete', () => {
+    const twoFiles = () => json([file(), file({ id: 'f2', originalName: 'notes.txt' })]);
+
+    it('hides the delete button from non-hosts', async () => {
+      mockApi({ list: twoFiles });
+      render(<FilesPanel meetingId={7} />);
+      await screen.findByRole('link', { name: 'minutes.pdf' });
+
+      expect(screen.queryByRole('button', { name: /Delete/ })).not.toBeInTheDocument();
+    });
+
+    it('shows a delete button on every row for the host', async () => {
+      mockApi({ list: twoFiles });
+      render(<FilesPanel meetingId={7} isHost />);
+      await screen.findByRole('link', { name: 'minutes.pdf' });
+
+      expect(screen.getByRole('button', { name: 'Delete minutes.pdf' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Delete notes.txt' })).toBeInTheDocument();
+    });
+
+    it('asks for confirmation and keeps the file when cancelled', async () => {
+      const fetchMock = mockApi({ list: twoFiles });
+      render(<FilesPanel meetingId={7} isHost />);
+      await screen.findByRole('link', { name: 'minutes.pdf' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete minutes.pdf' }));
+      const confirm = screen.getByRole('group', { name: 'Confirm deleting minutes.pdf' });
+      expect(within(confirm).getByText('Delete this file?')).toBeInTheDocument();
+      expect(within(confirm).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+
+      await userEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+
+      expect(screen.getByRole('link', { name: 'minutes.pdf' })).toBeInTheDocument();
+      expect(screen.queryByRole('group')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Delete minutes.pdf' })).toHaveFocus();
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
+    });
+
+    it('removes the item without reloading the list once the delete is confirmed', async () => {
+      const fetchMock = mockApi({
+        list: twoFiles,
+        remove: () => Promise.resolve(new Response(null, { status: 204 })),
+      });
+      render(<FilesPanel meetingId={7} isHost />);
+      await screen.findByRole('link', { name: 'minutes.pdf' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete minutes.pdf' }));
+      await userEvent.click(
+        within(screen.getByRole('group')).getByRole('button', { name: 'Delete' }),
+      );
+
+      await waitFor(() =>
+        expect(screen.queryByRole('link', { name: 'minutes.pdf' })).not.toBeInTheDocument(),
+      );
+      expect(screen.getByRole('link', { name: 'notes.txt' })).toBeInTheDocument();
+      expect(screen.getByText('Deleted minutes.pdf')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Upload File' })).toHaveFocus();
+
+      const calls = fetchMock.mock.calls;
+      const del = calls.find(([, init]) => init?.method === 'DELETE')!;
+      expect(del[0]).toBe('/api/meetings/7/files/f1');
+      expect(calls.filter(([, init]) => !init?.method)).toHaveLength(1); // only the initial list
+    });
+
+    it('shows the empty state after the last file is deleted', async () => {
+      mockApi({
+        list: () => json([file()]),
+        remove: () => Promise.resolve(new Response(null, { status: 204 })),
+      });
+      render(<FilesPanel meetingId={7} isHost />);
+      await screen.findByRole('link', { name: 'minutes.pdf' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete minutes.pdf' }));
+      await userEvent.click(
+        within(screen.getByRole('group')).getByRole('button', { name: 'Delete' }),
+      );
+
+      expect(await screen.findByText('No files yet.')).toBeInTheDocument();
+    });
+
+    it('keeps the file and shows the server message when the delete is refused', async () => {
+      mockApi({
+        list: twoFiles,
+        remove: () =>
+          json({ message: 'Only the meeting host can delete files', statusCode: 403 }, 403),
+      });
+      render(<FilesPanel meetingId={7} isHost />);
+      await screen.findByRole('link', { name: 'minutes.pdf' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete minutes.pdf' }));
+      await userEvent.click(
+        within(screen.getByRole('group')).getByRole('button', { name: 'Delete' }),
+      );
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Only the meeting host can delete files',
+      );
+      expect(screen.getByRole('link', { name: 'minutes.pdf' })).toBeInTheDocument();
+    });
+
+    it('treats a file that is already gone as deleted', async () => {
+      mockApi({ list: twoFiles, remove: () => json({ message: 'File not found' }, 404) });
+      render(<FilesPanel meetingId={7} isHost />);
+      await screen.findByRole('link', { name: 'minutes.pdf' });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete minutes.pdf' }));
+      await userEvent.click(
+        within(screen.getByRole('group')).getByRole('button', { name: 'Delete' }),
+      );
+
+      await waitFor(() =>
+        expect(screen.queryByRole('link', { name: 'minutes.pdf' })).not.toBeInTheDocument(),
+      );
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
   });
 });
