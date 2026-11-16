@@ -26,6 +26,10 @@ npm run dev:api
 # Build
 npm run build
 
+# Test
+npm run test:e2e:api   # API e2e (needs Postgres, wipes the dev DB)
+npm run test:web       # web component tests
+
 # Lint
 npm run lint
 
@@ -38,6 +42,7 @@ npm run format
 - **Monorepo**: NPM workspaces
 - **Frontend**: Next.js 15, React 19, TypeScript
 - **Backend**: NestJS 11 on Fastify, TypeScript
+- **Testing**: Jest + supertest (API e2e), Vitest + Testing Library (web)
 - **Linting**: ESLint 9 (flat config), Prettier
 
 ## Instructions
