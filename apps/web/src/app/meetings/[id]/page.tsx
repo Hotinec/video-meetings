@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { CalendarIcon } from '@/components/icons';
+import { FilesPanel } from '@/components/files-panel';
 import { SectionCard } from '@/components/section-card';
 import {
   fetchMeeting,
@@ -55,9 +56,7 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
         </header>
 
         <SectionCard title="Files" description="Documents and recordings shared in this meeting">
-          <p className="text-sm" style={{ color: 'var(--muted)' }}>
-            No files yet.
-          </p>
+          <FilesPanel meetingId={meeting.id} />
         </SectionCard>
       </div>
     </main>

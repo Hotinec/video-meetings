@@ -56,7 +56,7 @@
 **Tasks:**
 
 - [x] Add a minimal `/meetings/[id]` page (auth-protected through the existing middleware) with a "Files" section or tab, and add a `lib/meeting-files.ts` API client. It goes through the existing auth proxy in `app/api`.
-- [ ] Build `FilesPanel`: a list showing name, human-readable size and upload date, with loading, empty and error states.
+- [x] Build `FilesPanel`: a list showing name, human-readable size and upload date, with loading, empty and error states.
 - [ ] Add an "Upload File" button (hidden `<input type="file">`) that posts the file and refreshes the list, shows server validation errors as readable messages, and makes each file link to the `/download` endpoint.
 - [ ] Add component tests (or a Playwright smoke check) for list rendering, upload success and the error message.
 
