@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FilesPanel } from './files-panel';
 import type { MeetingFile } from '@/lib/meeting-files';
+import { FakeXHR, installFakeXHR } from '@/test/fake-xhr';
 
 const file = (over: Partial<MeetingFile> = {}): MeetingFile => ({
   id: 'f1',
@@ -17,12 +18,14 @@ const file = (over: Partial<MeetingFile> = {}): MeetingFile => ({
 const json = (body: unknown, status = 200) =>
   Promise.resolve(new Response(JSON.stringify(body), { status }));
 
-/** Routes fetch calls by method so a test can describe list and upload responses separately. */
-function mockApi(handlers: { list: () => Promise<Response>; upload?: () => Promise<Response> }) {
-  const fetchMock = vi.fn((_url: string, init?: RequestInit) =>
-    init?.method === 'POST' ? handlers.upload!() : handlers.list(),
-  );
+/** `list` is served by fetch; `upload` (optional) auto-replies to XHR uploads. */
+function mockApi(handlers: {
+  list: () => Promise<Response>;
+  upload?: () => { status: number; body: unknown };
+}) {
+  const fetchMock = vi.fn(() => handlers.list());
   vi.stubGlobal('fetch', fetchMock);
+  installFakeXHR(handlers.upload ?? null);
   return fetchMock;
 }
 
@@ -72,7 +75,7 @@ describe('FilesPanel', () => {
       .fn()
       .mockImplementationOnce(() => json([]))
       .mockImplementation(() => json([file({ originalName: 'notes.txt' })]));
-    const upload = vi.fn(() => json(file({ originalName: 'notes.txt' }), 201));
+    const upload = vi.fn(() => ({ status: 201, body: file({ originalName: 'notes.txt' }) }));
     const fetchMock = mockApi({ list, upload });
     render(<FilesPanel meetingId={7} />);
     await screen.findByText('No files yet.');
@@ -84,24 +87,25 @@ describe('FilesPanel', () => {
     expect(await screen.findByRole('link', { name: 'notes.txt' })).toBeInTheDocument();
     expect(screen.getByText('Uploaded notes.txt')).toBeInTheDocument();
 
-    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!;
-    expect(post[0]).toBe('/api/meetings/7/files');
-    expect((post[1]!.body as FormData).get('file')).toBe(chosen);
+    const xhr = FakeXHR.instances[0];
+    expect(xhr.method).toBe('POST');
+    expect(xhr.url).toBe('/api/meetings/7/files');
+    expect((xhr.body as FormData).get('file')).toBe(chosen);
+    expect(fetchMock).toHaveBeenCalledTimes(2); // initial load + refresh, no fetch for the upload
   });
 
   it('shows the readable server validation error and keeps the list', async () => {
-    const message = 'File type not allowed. Allowed types: mp4, pdf, txt';
+    const message = 'File content does not match its type. Allowed types: mp4, pdf, txt';
     mockApi({
       list: () => json([file()]),
-      upload: () => json({ message, error: 'Bad Request', statusCode: 400 }, 400),
+      upload: () => ({ status: 400, body: { message, error: 'Bad Request', statusCode: 400 } }),
     });
     render(<FilesPanel meetingId={7} />);
     await screen.findByRole('link', { name: 'minutes.pdf' });
 
     await userEvent.upload(
       screen.getByLabelText('Choose a file to upload'),
-      new File(['MZ'], 'setup.exe'),
-      { applyAccept: false },
+      new File(['MZ'], 'fake.pdf'),
     );
 
     expect(await screen.findByRole('alert')).toHaveTextContent(message);
@@ -112,7 +116,7 @@ describe('FilesPanel', () => {
   it('takes the first message when the API returns a list of validation errors', async () => {
     mockApi({
       list: () => json([]),
-      upload: () => json({ message: ['first problem', 'second problem'] }, 400),
+      upload: () => ({ status: 400, body: { message: ['first problem', 'second problem'] } }),
     });
     render(<FilesPanel meetingId={7} />);
     await screen.findByText('No files yet.');
@@ -130,7 +134,7 @@ describe('FilesPanel', () => {
       .fn()
       .mockImplementationOnce(() => json([]))
       .mockImplementation(() => json({ message: 'Bad gateway' }, 502));
-    mockApi({ list, upload: () => json(file({ originalName: 'notes.txt' }), 201) });
+    mockApi({ list, upload: () => ({ status: 201, body: file({ originalName: 'notes.txt' }) }) });
     render(<FilesPanel meetingId={7} />);
     await screen.findByText('No files yet.');
 
@@ -151,7 +155,7 @@ describe('FilesPanel', () => {
       .fn()
       .mockImplementationOnce(() => new Promise<Response>((r) => (resolveFirst = r)))
       .mockImplementation(() => json([file({ originalName: 'new.txt' })]));
-    mockApi({ list, upload: () => json(file({ originalName: 'new.txt' }), 201) });
+    mockApi({ list, upload: () => ({ status: 201, body: file({ originalName: 'new.txt' }) }) });
     render(<FilesPanel meetingId={7} />);
 
     // Upload while the initial load is still pending; the refresh after it returns first.
@@ -166,5 +170,64 @@ describe('FilesPanel', () => {
 
     expect(screen.getByRole('link', { name: 'new.txt' })).toBeInTheDocument();
     expect(screen.queryByText('No files yet.')).not.toBeInTheDocument();
+  });
+
+  it('shows a progress bar that follows the upload and disappears when it finishes', async () => {
+    mockApi({ list: () => json([]) });
+    render(<FilesPanel meetingId={7} />);
+    await screen.findByText('No files yet.');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+
+    await userEvent.upload(
+      screen.getByLabelText('Choose a file to upload'),
+      new File(['hello'], 'movie.mp4', { type: 'video/mp4' }),
+    );
+
+    const bar = await screen.findByRole('progressbar', { name: 'Uploading movie.mp4' });
+    expect(bar).toHaveAttribute('aria-valuenow', '0');
+    expect(screen.getByRole('button', { name: /Uploading/ })).toBeDisabled();
+
+    const xhr = FakeXHR.instances[0];
+    act(() => xhr.progress(25, 100));
+    expect(bar).toHaveAttribute('aria-valuenow', '25');
+    expect(screen.getByText('25%')).toBeInTheDocument();
+
+    act(() => xhr.progress(100, 100));
+    expect(bar).toHaveAttribute('aria-valuenow', '100');
+
+    act(() => xhr.respond(201, file({ originalName: 'movie.mp4' })));
+    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument());
+    expect(screen.getByText('Uploaded movie.mp4')).toBeInTheDocument();
+  });
+
+  it('hides the progress bar and shows the error when the upload is rejected', async () => {
+    mockApi({ list: () => json([]) });
+    render(<FilesPanel meetingId={7} />);
+    await screen.findByText('No files yet.');
+
+    await userEvent.upload(
+      screen.getByLabelText('Choose a file to upload'),
+      new File(['x'], 'a.txt'),
+    );
+    await screen.findByRole('progressbar');
+    act(() => FakeXHR.instances[0].respond(400, { message: 'File is too large' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('File is too large');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  it('reports a network failure during upload', async () => {
+    mockApi({ list: () => json([]) });
+    render(<FilesPanel meetingId={7} />);
+    await screen.findByText('No files yet.');
+
+    await userEvent.upload(
+      screen.getByLabelText('Choose a file to upload'),
+      new File(['x'], 'a.txt'),
+    );
+    await screen.findByRole('progressbar');
+    act(() => FakeXHR.instances[0].fail());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Cannot reach the server');
   });
 });

@@ -11,11 +11,16 @@ export class FilesUnauthorizedError extends Error {}
 
 const base = (meetingId: number) => `/api/meetings/${meetingId}/files`;
 
+/** The API returns `message` as a string, or a list of strings for validation errors. */
+function errorMessage(data: { message?: unknown }, fallback: string): string {
+  const message = Array.isArray(data.message) ? data.message[0] : data.message;
+  return typeof message === 'string' && message ? message : fallback;
+}
+
 async function failure(res: Response, fallback: string): Promise<Error> {
   if (res.status === 401) return new FilesUnauthorizedError('Your session has expired');
   const data = await res.json().catch(() => ({}));
-  const message = Array.isArray(data.message) ? data.message[0] : data.message;
-  return new Error(typeof message === 'string' && message ? message : fallback);
+  return new Error(errorMessage(data, fallback));
 }
 
 export async function listMeetingFiles(meetingId: number): Promise<MeetingFile[]> {
@@ -24,12 +29,38 @@ export async function listMeetingFiles(meetingId: number): Promise<MeetingFile[]
   return res.json();
 }
 
-export async function uploadMeetingFile(meetingId: number, file: File): Promise<MeetingFile> {
-  const body = new FormData();
-  body.append('file', file);
-  const res = await fetch(base(meetingId), { method: 'POST', body });
-  if (!res.ok) throw await failure(res, 'Upload failed');
-  return res.json();
+/**
+ * Uploads with XMLHttpRequest because `fetch` can't report upload progress.
+ * `onProgress` receives the fraction (0 to 1) of the request body sent so far.
+ */
+export function uploadMeetingFile(
+  meetingId: number,
+  file: File,
+  onProgress?: (fraction: number) => void,
+): Promise<MeetingFile> {
+  return new Promise((resolve, reject) => {
+    const body = new FormData();
+    body.append('file', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', base(meetingId));
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) onProgress?.(event.loaded / event.total);
+    };
+    xhr.onerror = () => reject(new Error('Cannot reach the server. Please try again.'));
+    xhr.onload = () => {
+      let data: { message?: unknown } = {};
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        /* non-JSON body: fall back to the generic message */
+      }
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(data as unknown as MeetingFile);
+      if (xhr.status === 401) return reject(new FilesUnauthorizedError('Your session has expired'));
+      reject(new Error(errorMessage(data, 'Upload failed')));
+    };
+    xhr.send(body);
+  });
 }
 
 export const downloadUrl = (meetingId: number, fileId: string) =>
