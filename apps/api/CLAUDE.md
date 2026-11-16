@@ -30,6 +30,7 @@ All tests are e2e (no unit tests). They boot the full NestJS app against a real 
 - `auth.e2e-spec.ts` — registration and login endpoints
 - `meetings.e2e-spec.ts` — meeting CRUD endpoints (JWT-protected)
 - `meeting-files.e2e-spec.ts` — file upload, list, download and delete (uses a temporary `UPLOAD_DIR`)
+- `meeting-files-flow.e2e-spec.ts` — the PRD's end-to-end story in one test: upload → list → download → delete (host only), plus the 400 cases
 
 **Prerequisites:**
 
