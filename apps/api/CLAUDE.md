@@ -77,6 +77,7 @@ src/
     content-disposition.ts # attachment header with ASCII fallback + UTF-8 filename*
   prisma/           # PrismaService (global client w/ pg adapter)
 test/               # e2e specs (*.e2e-spec.ts)
+uploads/            # runtime upload root (UPLOAD_DIR; gitignored): meetings/{meetingId}/{fileId}, tmp/ for in-flight uploads
 prisma/             # schema.prisma + migrations (config: prisma7.config.ts)
 ```
 

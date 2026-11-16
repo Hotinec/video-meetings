@@ -83,7 +83,7 @@
 **Tasks:**
 
 - [x] Write the E2E test for upload → display → download → deletion (API-level in `test/`, plus a Playwright run against the UI if it is available in the project).
-- [ ] Update `CLAUDE.md`, `apps/api/CLAUDE.md` and `apps/web/CLAUDE.md` (new module, `UPLOAD_DIR`, `uploads/` directory, new endpoints, new page).
+- [x] Update `CLAUDE.md`, `apps/api/CLAUDE.md` and `apps/web/CLAUDE.md` (new module, `UPLOAD_DIR`, `uploads/` directory, new endpoints, new page).
 
 **Definition of Done:** The E2E test passes in a clean run, and lint and build succeed (`npm run lint`, `npm run build`).
 
