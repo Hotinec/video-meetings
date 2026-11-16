@@ -1,5 +1,6 @@
 import 'server-only';
 import { NextResponse } from 'next/server';
+import { parseMeetingId } from '@/lib/meeting-id';
 import { API_URL, getToken } from '@/lib/session';
 
 const UNREACHABLE = { message: 'Cannot reach the server. Please try again.' };
@@ -23,8 +24,8 @@ export async function proxyToApi(
   }
 }
 
-/** Ids end up in an API path, so only accept plain digits. */
-export const isMeetingId = (id: string) => /^\d+$/.test(id);
+/** Ids end up in an API path, so only accept plain digits that fit the API's integer column. */
+export const isMeetingId = (id: string) => parseMeetingId(id) !== null;
 
 /** Relays an API JSON response (success or `{ message }` error) unchanged. */
 export async function relayJson(res: Response): Promise<NextResponse> {

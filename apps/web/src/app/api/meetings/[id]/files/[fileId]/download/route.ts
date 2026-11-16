@@ -9,13 +9,15 @@ const PASS_THROUGH = [
 ];
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; fileId: string }> },
 ) {
   const { id, fileId } = await params;
   if (!isMeetingId(id)) return NextResponse.json({ message: 'File not found' }, { status: 404 });
 
-  const res = await proxyToApi(`/meetings/${id}/files/${encodeURIComponent(fileId)}/download`);
+  const res = await proxyToApi(`/meetings/${id}/files/${encodeURIComponent(fileId)}/download`, {
+    signal: request.signal, // stop reading from the API when the client cancels
+  });
   if (!res.ok) return relayJson(res);
 
   const headers = new Headers();

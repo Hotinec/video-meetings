@@ -124,4 +124,47 @@ describe('FilesPanel', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('first problem'));
   });
+
+  it('keeps the uploaded file and shows no error when the refresh after upload fails', async () => {
+    const list = vi
+      .fn()
+      .mockImplementationOnce(() => json([]))
+      .mockImplementation(() => json({ message: 'Bad gateway' }, 502));
+    mockApi({ list, upload: () => json(file({ originalName: 'notes.txt' }), 201) });
+    render(<FilesPanel meetingId={7} />);
+    await screen.findByText('No files yet.');
+
+    await userEvent.upload(
+      screen.getByLabelText('Choose a file to upload'),
+      new File(['hello'], 'notes.txt', { type: 'text/plain' }),
+    );
+
+    expect(await screen.findByRole('link', { name: 'notes.txt' })).toBeInTheDocument();
+    expect(screen.getByText('Uploaded notes.txt')).toBeInTheDocument();
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('ignores a slow older list response that arrives after a newer one', async () => {
+    let resolveFirst!: (res: Response) => void;
+    const list = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<Response>((r) => (resolveFirst = r)))
+      .mockImplementation(() => json([file({ originalName: 'new.txt' })]));
+    mockApi({ list, upload: () => json(file({ originalName: 'new.txt' }), 201) });
+    render(<FilesPanel meetingId={7} />);
+
+    // Upload while the initial load is still pending; the refresh after it returns first.
+    await userEvent.upload(
+      screen.getByLabelText('Choose a file to upload'),
+      new File(['x'], 'new.txt', { type: 'text/plain' }),
+    );
+    await screen.findByRole('link', { name: 'new.txt' });
+
+    resolveFirst(new Response(JSON.stringify([]), { status: 200 }));
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(screen.getByRole('link', { name: 'new.txt' })).toBeInTheDocument();
+    expect(screen.queryByText('No files yet.')).not.toBeInTheDocument();
+  });
 });

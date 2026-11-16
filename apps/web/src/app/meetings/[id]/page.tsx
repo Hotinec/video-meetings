@@ -9,6 +9,7 @@ import {
   UnauthorizedError,
   type Meeting,
 } from '@/lib/meetings';
+import { parseMeetingId } from '@/lib/meeting-id';
 import { getToken } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -17,14 +18,15 @@ const dateFormat = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyl
 
 export default async function MeetingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!/^\d+$/.test(id)) notFound();
+  const meetingId = parseMeetingId(id);
+  if (meetingId === null) notFound();
 
   const token = await getToken();
   if (!token) redirect('/login');
 
   let meeting: Meeting;
   try {
-    meeting = await fetchMeeting(token, Number(id));
+    meeting = await fetchMeeting(token, meetingId);
   } catch (err) {
     if (err instanceof UnauthorizedError) redirect('/api/auth/logout');
     if (err instanceof MeetingNotFoundError) notFound();

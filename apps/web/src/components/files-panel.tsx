@@ -31,12 +31,18 @@ export function FilesPanel({ meetingId }: { meetingId: number }) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploaded, setUploaded] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Every list request takes a number; only the newest one may write state, so a slow
+  // older response can't overwrite a fresher list.
+  const latestRequest = useRef(0);
 
   const load = useCallback(async () => {
+    const request = ++latestRequest.current;
     setState({ status: 'loading' });
     try {
-      setState({ status: 'ready', files: await listMeetingFiles(meetingId) });
+      const files = await listMeetingFiles(meetingId);
+      if (request === latestRequest.current) setState({ status: 'ready', files });
     } catch (err) {
+      if (request !== latestRequest.current) return;
       if (err instanceof FilesUnauthorizedError) {
         signOut();
         return;
@@ -61,15 +67,32 @@ export function FilesPanel({ meetingId }: { meetingId: number }) {
     setUploadError(null);
     setUploaded(null);
     setIsUploading(true);
+    let saved: MeetingFile;
     try {
-      const saved = await uploadMeetingFile(meetingId, file);
-      setUploaded(saved.originalName);
-      setState({ status: 'ready', files: await listMeetingFiles(meetingId) });
+      saved = await uploadMeetingFile(meetingId, file);
     } catch (err) {
+      setIsUploading(false);
       if (err instanceof FilesUnauthorizedError) return signOut();
       setUploadError(err instanceof Error ? err.message : 'Upload failed');
-    } finally {
-      setIsUploading(false);
+      return;
+    }
+
+    // The file is saved, so from here on nothing may be reported as an upload failure.
+    // Show it straight away, then refresh to pick up anything else; if the refresh fails the
+    // optimistic list stays.
+    const request = ++latestRequest.current;
+    setUploaded(saved.originalName);
+    setState((prev) =>
+      prev.status === 'ready'
+        ? { status: 'ready', files: [saved, ...prev.files.filter((f) => f.id !== saved.id)] }
+        : { status: 'ready', files: [saved] },
+    );
+    setIsUploading(false);
+    try {
+      const files = await listMeetingFiles(meetingId);
+      if (request === latestRequest.current) setState({ status: 'ready', files });
+    } catch {
+      /* keep the optimistic list */
     }
   };
 
