@@ -43,6 +43,11 @@ describe('FilesPanel', () => {
     const link = await screen.findByRole('link', { name: 'minutes.pdf' });
     expect(link).toHaveAttribute('href', '/api/meetings/7/files/f1/download');
     expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+    expect(link.querySelector('svg')).toHaveAttribute('data-kind', 'pdf');
+    expect(screen.getByRole('link', { name: 'big.mp4' }).querySelector('svg')).toHaveAttribute(
+      'data-kind',
+      'video',
+    );
     expect(screen.getByText('5.0 MB')).toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
     expect(screen.getAllByText(/2026/)).toHaveLength(2);

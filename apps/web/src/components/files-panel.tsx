@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Spinner } from '@heroui/react';
-import { UploadIcon } from '@/components/icons';
+import { FileIcon, UploadIcon } from '@/components/icons';
+import { fileKind } from '@/lib/file-kind';
 import { ACCEPT, validateFile } from '@/lib/file-rules';
 import {
   downloadUrl,
@@ -166,10 +167,15 @@ export function FilesPanel({ meetingId }: { meetingId: number }) {
             <a
               href={downloadUrl(meetingId, file.id)}
               download
-              className="inline-flex items-center min-h-11 font-medium break-all min-w-0 underline-offset-4 hover:underline focus-visible:underline"
+              className="group inline-flex items-center gap-2.5 min-h-11 font-medium min-w-0"
               style={{ color: 'var(--accent)' }}
             >
-              {file.originalName}
+              <span className="shrink-0">
+                <FileIcon kind={fileKind(file.mimeType, file.originalName)} />
+              </span>
+              <span className="break-all underline-offset-4 group-hover:underline group-focus-visible:underline">
+                {file.originalName}
+              </span>
             </a>
             <span
               className="flex items-center gap-3 text-sm shrink-0"
