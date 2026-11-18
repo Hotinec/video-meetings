@@ -7,7 +7,7 @@ NPM monorepo with two applications.
 ```
 apps/
   web/   # Next.js 15 (App Router) — runs on :3000
-  api/   # NestJS 11 — runs on :3001
+  api/   # NestJS 11 (Fastify) — runs on :3001
 ```
 
 ## Commands
@@ -37,7 +37,7 @@ npm run format
 
 - **Monorepo**: NPM workspaces
 - **Frontend**: Next.js 15, React 19, TypeScript
-- **Backend**: NestJS 11, TypeScript
+- **Backend**: NestJS 11 on Fastify, TypeScript
 - **Linting**: ESLint 9 (flat config), Prettier
 
 ## Instructions
