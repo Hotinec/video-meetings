@@ -1,3 +1,5 @@
+import type { FileKind } from '@/lib/file-kind';
+
 export function VideoIcon() {
   return (
     <svg
@@ -148,6 +150,77 @@ export function UploadIcon() {
       <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
       <path d="M17 8l-5-5-5 5" />
       <path d="M12 3v12" />
+    </svg>
+  );
+}
+
+const FILE_SHAPE = (
+  <>
+    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+    <path d="M14 2v6h6" />
+  </>
+);
+
+const FILE_KIND_GLYPH: Record<FileKind, React.ReactNode> = {
+  video: <path d="M10 12.5v4l3.5-2z" />,
+  audio: (
+    <>
+      <path d="M10 17V12l5-1v5" />
+      <circle cx="8.5" cy="17" r="1.5" />
+      <circle cx="13.5" cy="16" r="1.5" />
+    </>
+  ),
+  pdf: <path d="M8 17v-5h1.8a1.5 1.5 0 010 3H8M14 17v-5h1.2a2.5 2.5 0 010 5z" />,
+  document: <path d="M8 12h8M8 15h8M8 18h5" />,
+  spreadsheet: <path d="M8 12h8M8 15h8M8 18h8M12 12v6" />,
+  presentation: (
+    <>
+      <path d="M8 12h8v5H8z" />
+      <path d="M12 17v2" />
+    </>
+  ),
+  text: <path d="M8 13h8M8 17h6" />,
+  other: null,
+};
+
+/** Decorative: the file name next to it carries the meaning. */
+export function FileIcon({ kind }: { kind: FileKind }) {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      data-kind={kind}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {FILE_SHAPE}
+      {FILE_KIND_GLYPH[kind]}
+    </svg>
+  );
+}
+
+export function TrashIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+      <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
     </svg>
   );
 }
