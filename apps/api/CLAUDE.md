@@ -5,7 +5,7 @@ NestJS 11 backend application.
 ## Stack
 
 - NestJS 11
-- Express
+- Fastify (`@nestjs/platform-fastify` 11, `@fastify/multipart`)
 - Prisma 7 (PostgreSQL via `@prisma/adapter-pg`, client generated to `generated/prisma`)
 - CQRS (`@nestjs/cqrs` 11)
 - JWT auth (`@nestjs/jwt` 11 — v12 is ESM-only and breaks Jest), bcrypt, class-validator
@@ -29,6 +29,7 @@ All tests are e2e (no unit tests). They boot the full NestJS app against a real 
 
 - `auth.e2e-spec.ts` — registration and login endpoints
 - `meetings.e2e-spec.ts` — meeting CRUD endpoints (JWT-protected)
+- `meeting-files.e2e-spec.ts` — file upload and list (uses a temporary `UPLOAD_DIR`)
 
 **Prerequisites:**
 
@@ -54,8 +55,9 @@ Tests run serially (`--runInBand`) and each suite cleans up its own database row
 
 ```
 src/
-  app.module.ts     # root module — imports AuthModule, MeetingModule
-  main.ts           # entry point, listens on :3001, global ValidationPipe
+  app.module.ts     # root module — imports AuthModule, MeetingModule, FilesModule
+  app.setup.ts      # shared app setup (multipart limits, ValidationPipe) used by main.ts and e2e
+  main.ts           # entry point (Fastify adapter), listens on :3001, CORS, calls setupApp
   auth/             # token generation + validation, exports JwtModule; imports UsersModule
     guards/         # JwtAuthGuard — verifies Bearer token, sets req.user
     decorators/     # @CurrentUser() — extracts JwtPayload from req.user
@@ -67,6 +69,9 @@ src/
     commands/       # CreateMeetingCommand
     queries/        # GetMeetingsQuery, GetMeetingByIdQuery
     dto/            # CreateMeetingDto (title, date)
+  files/            # meeting file upload/list (POST/GET /meetings/:id/files), JWT-protected
+    commands/       # UploadFileCommand
+    queries/        # GetMeetingFilesQuery
   prisma/           # PrismaService (global client w/ pg adapter)
 test/               # e2e specs (*.e2e-spec.ts)
 prisma/             # schema.prisma + migrations (config: prisma7.config.ts)
@@ -76,7 +81,7 @@ prisma/             # schema.prisma + migrations (config: prisma7.config.ts)
 
 ### AppModule (`app.module.ts`)
 
-Root module. Imports `AuthModule` and `MeetingModule`. Does not import `UsersModule` directly — it is pulled in transitively via `AuthModule`.
+Root module. Imports `AuthModule`, `MeetingModule` and `FilesModule`. Does not import `UsersModule` directly — it is pulled in transitively via `AuthModule`.
 
 ### UsersModule (`users/`)
 
@@ -128,14 +133,28 @@ Commands and queries:
 - `GetMeetingsQuery(hostId)` → returns `Meeting[]` ordered by `createdAt desc`
 - `GetMeetingByIdQuery(id)` → returns `Meeting` or throws `NotFoundException`
 
+### FilesModule (`files/`)
+
+Owns meeting file upload and listing. All routes are protected by `JwtAuthGuard`.
+
+| Concern       | Details                                                                 |
+| ------------- | ----------------------------------------------------------------------- |
+| **Imports**   | `CqrsModule`, `AuthModule`                                              |
+| **Providers** | `PrismaService`, `UploadFileHandler`, `GetMeetingFilesHandler`, storage |
+
+- `POST /meetings/:id/files` — checks the meeting exists (404), streams the file to `UPLOAD_DIR/tmp`, then `UploadFileCommand` moves it to `meetings/{meetingId}/{fileId}` and saves the row. The temp file is removed on any failure.
+- `GET /meetings/:id/files` — `GetMeetingFilesQuery` returns metadata, newest first. `filePath` is never exposed.
+
 ### Module dependency graph
 
 ```
 AppModule
 ├── AuthModule
 │   └── UsersModule   (user data; Auth calls its handlers via QueryBus/CommandBus)
-└── MeetingModule
-    └── AuthModule    (re-used for JwtModule + guards)
+├── MeetingModule
+│   └── AuthModule    (re-used for JwtModule + guards)
+└── FilesModule
+    └── AuthModule    (guards; calls GetMeetingByIdQuery via QueryBus)
 ```
 
 ## CQRS pattern
@@ -194,6 +213,11 @@ Every module that uses the bus must import `CqrsModule` and list all handlers in
   providers: [DoSomethingHandler, GetSomethingHandler],
 })
 ```
+
+## Configuration
+
+- `UPLOAD_DIR` — upload root, default `./uploads` (gitignored, created at startup)
+- `MAX_UPLOAD_BYTES` — per-file size cap, default 100 MB
 
 ## Notes
 
