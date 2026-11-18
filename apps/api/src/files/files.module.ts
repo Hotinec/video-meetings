@@ -6,6 +6,7 @@ import { UploadFileHandler } from './commands/upload-file.handler';
 import { FILE_STORAGE } from './file-storage';
 import { FilesController } from './files.controller';
 import { LocalFileStorage } from './local-file-storage';
+import { GetMeetingFileHandler } from './queries/get-meeting-file.handler';
 import { GetMeetingFilesHandler } from './queries/get-meeting-files.handler';
 
 @Module({
@@ -15,6 +16,7 @@ import { GetMeetingFilesHandler } from './queries/get-meeting-files.handler';
     PrismaService,
     UploadFileHandler,
     GetMeetingFilesHandler,
+    GetMeetingFileHandler,
     { provide: FILE_STORAGE, useClass: LocalFileStorage },
   ],
 })

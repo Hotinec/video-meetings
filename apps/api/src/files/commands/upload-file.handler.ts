@@ -1,6 +1,8 @@
-import { Inject, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { randomUUID } from 'node:crypto';
+import { fromFile } from 'file-type';
+import { describeAllowedTypes, matchesContent } from '../allowed-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FILE_STORAGE, FileStorage } from '../file-storage';
 import { MeetingFileView, meetingFileSelect } from '../meeting-file.view';
@@ -21,6 +23,13 @@ export class UploadFileHandler implements ICommandHandler<UploadFileCommand> {
         select: { id: true },
       });
       if (!meeting) throw new NotFoundException(`Meeting ${cmd.meetingId} not found`);
+
+      const detected = await fromFile(cmd.tempPath);
+      if (!matchesContent(cmd.originalName, detected?.ext)) {
+        throw new BadRequestException(
+          `File content does not match its type. Allowed types: ${describeAllowedTypes()}`,
+        );
+      }
 
       const fileId = randomUUID();
       storedPath = await this.storage.commit(cmd.tempPath, cmd.meetingId, fileId);

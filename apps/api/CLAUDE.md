@@ -71,7 +71,9 @@ src/
     dto/            # CreateMeetingDto (title, date)
   files/            # meeting file upload/list (POST/GET /meetings/:id/files), JWT-protected
     commands/       # UploadFileCommand
-    queries/        # GetMeetingFilesQuery
+    queries/        # GetMeetingFilesQuery, GetMeetingFileQuery
+    allowed-types.ts      # allowlist: extension -> MIME types + content-derived extensions
+    content-disposition.ts # attachment header with ASCII fallback + UTF-8 filename*
   prisma/           # PrismaService (global client w/ pg adapter)
 test/               # e2e specs (*.e2e-spec.ts)
 prisma/             # schema.prisma + migrations (config: prisma7.config.ts)
@@ -144,6 +146,11 @@ Owns meeting file upload and listing. All routes are protected by `JwtAuthGuard`
 
 - `POST /meetings/:id/files` — checks the meeting exists (404), streams the file to `UPLOAD_DIR/tmp`, then `UploadFileCommand` moves it to `meetings/{meetingId}/{fileId}` and saves the row. The temp file is removed on any failure.
 - `GET /meetings/:id/files` — `GetMeetingFilesQuery` returns metadata, newest first. `filePath` is never exposed.
+- `GET /meetings/:id/files/:fileId/download` — `GetMeetingFileQuery` (404 for an unknown file, another meeting's file, a missing disk file, or a path outside `UPLOAD_DIR`). Streams with `StreamableFile`; always `Content-Disposition: attachment` plus `X-Content-Type-Options: nosniff`. No `Range` support.
+
+Upload validation (all failures are 400 and leave nothing on disk): an early name + MIME check on client data (mp4, mov, webm, mp3, m4a, wav, pdf, docx, xlsx, pptx, txt), then a magic-byte check of the temp file with `file-type`. `txt` has no signature, so it must have none detected. Oversize uploads are rejected whether the plugin reports an error or a truncated stream.
+
+`file-type` is pinned to v16 (last CommonJS release); newer versions are ESM-only and break Jest.
 
 ### Module dependency graph
 
