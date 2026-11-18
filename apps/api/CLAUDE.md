@@ -29,7 +29,7 @@ All tests are e2e (no unit tests). They boot the full NestJS app against a real 
 
 - `auth.e2e-spec.ts` — registration and login endpoints
 - `meetings.e2e-spec.ts` — meeting CRUD endpoints (JWT-protected)
-- `meeting-files.e2e-spec.ts` — file upload and list (uses a temporary `UPLOAD_DIR`)
+- `meeting-files.e2e-spec.ts` — file upload, list, download and delete (uses a temporary `UPLOAD_DIR`)
 
 **Prerequisites:**
 
@@ -69,8 +69,8 @@ src/
     commands/       # CreateMeetingCommand
     queries/        # GetMeetingsQuery, GetMeetingByIdQuery
     dto/            # CreateMeetingDto (title, date)
-  files/            # meeting file upload/list (POST/GET /meetings/:id/files), JWT-protected
-    commands/       # UploadFileCommand
+  files/            # meeting file upload/list/download/delete (/meetings/:id/files), JWT-protected
+    commands/       # UploadFileCommand, DeleteFileCommand
     queries/        # GetMeetingFilesQuery, GetMeetingFileQuery
     allowed-types.ts      # allowlist: extension -> MIME types + content-derived extensions
     content-disposition.ts # attachment header with ASCII fallback + UTF-8 filename*
@@ -137,16 +137,17 @@ Commands and queries:
 
 ### FilesModule (`files/`)
 
-Owns meeting file upload and listing. All routes are protected by `JwtAuthGuard`.
+Owns meeting file upload, listing, download and delete. All routes are protected by `JwtAuthGuard`.
 
 | Concern       | Details                                                                 |
 | ------------- | ----------------------------------------------------------------------- |
 | **Imports**   | `CqrsModule`, `AuthModule`                                              |
-| **Providers** | `PrismaService`, `UploadFileHandler`, `GetMeetingFilesHandler`, storage |
+| **Providers** | `PrismaService`, `UploadFileHandler`, `DeleteFileHandler`, `GetMeetingFilesHandler`, `GetMeetingFileHandler`, storage |
 
 - `POST /meetings/:id/files` — checks the meeting exists (404), streams the file to `UPLOAD_DIR/tmp`, then `UploadFileCommand` moves it to `meetings/{meetingId}/{fileId}` and saves the row. The temp file is removed on any failure.
 - `GET /meetings/:id/files` — `GetMeetingFilesQuery` returns metadata, newest first. `filePath` is never exposed.
 - `GET /meetings/:id/files/:fileId/download` — `GetMeetingFileQuery` (404 for an unknown file, another meeting's file, a missing disk file, or a path outside `UPLOAD_DIR`). Streams with `StreamableFile`; always `Content-Disposition: attachment` plus `X-Content-Type-Options: nosniff`. No `Range` support.
+- `DELETE /meetings/:id/files/:fileId` — `DeleteFileCommand`, host only (`meeting.hostId === user.id`). 204 on success; 404 for an unknown meeting, unknown file, or a file of another meeting; 403 for a non-host. Removes the DB row, then the disk file; a missing disk file, a disk error (logged) or a path outside `UPLOAD_DIR` never blocks the DB delete.
 
 Upload validation (all failures are 400 and leave nothing on disk): an early name + MIME check on client data (mp4, mov, webm, mp3, m4a, wav, pdf, docx, xlsx, pptx, txt), then a magic-byte check of the temp file with `file-type`. `txt` has no signature, so it must have none detected. Oversize uploads are rejected whether the plugin reports an error or a truncated stream.
 

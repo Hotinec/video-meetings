@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Inject,
   Param,
   ParseIntPipe,
@@ -15,10 +17,12 @@ import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import '@fastify/multipart';
 import { createReadStream } from 'node:fs';
 import { FastifyReply, FastifyRequest } from 'fastify';
+import { CurrentUser, JwtPayload } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetMeetingByIdQuery } from '../meeting/queries/get-meeting-by-id.query';
 import { attachmentHeader } from './content-disposition';
 import { describeAllowedTypes, isAllowedByNameAndMime } from './allowed-types';
+import { DeleteFileCommand } from './commands/delete-file.command';
 import { UploadFileCommand } from './commands/upload-file.command';
 import { FILE_STORAGE, FileStorage, TempFile } from './file-storage';
 import { getMaxUploadBytes } from './upload.config';
@@ -100,5 +104,15 @@ export class FilesController {
     res.header('Content-Disposition', attachmentHeader(file.originalName));
     res.header('X-Content-Type-Options', 'nosniff');
     return new StreamableFile(createReadStream(file.absolutePath));
+  }
+
+  @Delete(':fileId')
+  @HttpCode(204)
+  async remove(
+    @Param('id', ParseIntPipe) meetingId: number,
+    @Param('fileId') fileId: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
+    await this.commandBus.execute(new DeleteFileCommand(meetingId, fileId, user.sub));
   }
 }

@@ -44,8 +44,8 @@
 **Impacts:** Backend
 **Tasks:**
 
-- [ ] Implement `DELETE /meetings/:id/files/:fileId` (`DeleteMeetingFileCommand` and handler). It checks `meeting.hostId === user.id` (403 otherwise) and removes the DB row and the file directory. A missing disk file must not block the DB delete.
-- [ ] Write e2e tests: the host gets 204 and the file is gone from the list and from disk; a non-host gets 403 and the file remains; an unknown file returns 404.
+- [x] Implement `DELETE /meetings/:id/files/:fileId` (`DeleteMeetingFileCommand` and handler). It checks `meeting.hostId === user.id` (403 otherwise) and removes the DB row and the file directory. A missing disk file must not block the DB delete.
+- [x] Write e2e tests: the host gets 204 and the file is gone from the list and from disk; a non-host gets 403 and the file remains; an unknown file returns 404.
 
 **Definition of Done:** Only the host can delete. Delete removes both the record and the disk file. The backend part of the PRD is complete (all four endpoints).
 
