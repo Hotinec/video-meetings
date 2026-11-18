@@ -1,2 +1,3 @@
 npm run lint
+npm run test:web
 npm run test:e2e:api

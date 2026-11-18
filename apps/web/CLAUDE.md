@@ -7,6 +7,7 @@ Next.js 15 frontend application.
 - Next.js 15 (App Router, Turbopack)
 - React 19
 - TypeScript 5
+- Vitest + Testing Library (jsdom) for component tests
 
 ## Commands
 
@@ -15,6 +16,7 @@ npm run dev      # start dev server on :3000
 npm run build    # production build
 npm run start    # start production server
 npm run lint     # lint src/
+npm test         # run component/unit tests (vitest)
 ```
 
 ## Structure
@@ -25,10 +27,14 @@ src/
     page.tsx     # home "/" — server component, requires login: shows email, latest 3 + all meetings, Log Out
     login/       # login page
     signup/      # registration page
+    meetings/[id]/ # meeting page (server component): title, date and the Files section
     api/auth/    # route handlers (login, register, logout) that proxy to the API and manage the cookie
-  components/    # shared UI (icons, AuthShell, SectionCard, LogoutButton)
-  lib/           # session.ts (cookie + API_URL), auth-proxy.ts, auth.ts (client calls), meetings.ts
-  middleware.ts  # redirects to /login when the `token` cookie is missing
+    api/meetings/[id]/files/  # proxy routes: GET list, POST upload (streams the body), [fileId]/download
+  components/    # shared UI (icons, AuthShell, SectionCard, LogoutButton, FilesPanel)
+  lib/           # session.ts (cookie + API_URL), auth-proxy.ts, auth.ts (client calls), meetings.ts,
+                 # files-proxy.ts (server: forwards to the API with the cookie's JWT), meeting-files.ts (browser client)
+  middleware.ts  # redirects to /login when the `token` cookie is missing (matches / and /meetings/*)
+vitest.config.mts, vitest.setup.ts  # test config (jsdom, `@` alias, jest-dom matchers)
 ```
 
 ## Auth
@@ -36,6 +42,12 @@ src/
 - The API's JWT is stored in an **httpOnly, SameSite=Lax cookie** (`token`, 7 days, `Secure` in production) set by the Next route handlers in `app/api/auth/*`. It is never exposed to client JS or localStorage.
 - Server components read the cookie and call the API (`API_URL`, defaults to `http://localhost:3001`) with `Authorization: Bearer`. A 401 from the API sends the user through `GET /api/auth/logout`, which clears the cookie and redirects to `/login`.
 - The email shown on the home page is decoded from the JWT payload for display only; the API verifies the signature.
+
+## Meeting files
+
+- `FilesPanel` (client component) lists a meeting's files with loading, empty and error (retry) states, and has an "Upload File" button (hidden `<input type="file">`, `accept` limited to the allowed types). Server validation messages show in a `role="alert"` region; each file name links to `/download`.
+- The browser only talks to same-origin `/api/meetings/:id/files` routes. They add the `Authorization` header from the httpOnly cookie, so the JWT never reaches client JS. The upload route streams the multipart body straight to the API, which does all validation.
+- Tests: `src/components/files-panel.test.tsx` (list, empty, error + retry, upload success, validation error) and `src/lib/meeting-files.test.ts`. They mock `fetch`.
 
 ## Notes
 

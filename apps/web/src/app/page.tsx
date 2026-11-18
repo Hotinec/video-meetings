@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { CalendarIcon, VideoIcon } from '@/components/icons';
 import { LogoutButton } from '@/components/logout-button';
@@ -17,7 +18,12 @@ function MeetingList({ meetings }: { meetings: Meeting[] }) {
           key={m.id}
           className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4 py-3 first:pt-0 last:pb-0"
         >
-          <span className="font-medium break-words min-w-0">{m.title}</span>
+          <Link
+            href={`/meetings/${m.id}`}
+            className="font-medium break-words min-w-0 underline-offset-4 hover:underline focus-visible:underline"
+          >
+            {m.title}
+          </Link>
           <span
             className="flex items-center gap-1.5 text-sm shrink-0"
             style={{ color: 'var(--muted)' }}

@@ -20,3 +20,16 @@ export async function fetchMeetings(token: string): Promise<Meeting[]> {
   if (!res.ok) throw new Error('Failed to load meetings');
   return res.json();
 }
+
+export class MeetingNotFoundError extends Error {}
+
+export async function fetchMeeting(token: string, id: number): Promise<Meeting> {
+  const res = await fetch(`${API_URL}/meetings/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  if (res.status === 401) throw new UnauthorizedError();
+  if (res.status === 404) throw new MeetingNotFoundError();
+  if (!res.ok) throw new Error('Failed to load meeting');
+  return res.json();
+}
