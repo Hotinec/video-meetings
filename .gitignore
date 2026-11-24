@@ -9,3 +9,6 @@ build/
 .DS_Store
 /screenshot
 uploads/
+.playwright-mcp/
+*.tsbuildinfo
+/screenshot-*.png
