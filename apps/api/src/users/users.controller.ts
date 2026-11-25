@@ -4,14 +4,21 @@ import {
   Controller,
   Get,
   Inject,
+  NotFoundException,
+  Param,
+  ParseIntPipe,
   Patch,
   Post,
   Req,
+  Res,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import '@fastify/multipart';
-import { FastifyRequest } from 'fastify';
+import { FastifyReply, FastifyRequest } from 'fastify';
+import { createReadStream } from 'node:fs';
+import { once } from 'node:events';
 import { CurrentUser, JwtPayload } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FILE_STORAGE, FileStorage, TempFile } from '../files/file-storage';
@@ -20,7 +27,10 @@ import { UploadAvatarCommand } from './commands/upload-avatar.command';
 import { UpdateUsernameCommand } from './commands/update-username.command';
 import { UpdateUsernameDto } from './dto/update-username.dto';
 import { GetCurrentUserQuery } from './queries/get-current-user.query';
+import { GetUserAvatarQuery, UserAvatarFile } from './queries/get-user-avatar.query';
 import { UserProfileView } from './user-profile.view';
+
+const MAX_INT4 = 2147483647;
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
@@ -77,5 +87,27 @@ export class UsersController {
     }
 
     return this.commandBus.execute(new UploadAvatarCommand(user.sub, temp.path));
+  }
+
+  @Get(':id/avatar')
+  async avatar(
+    @Param('id', ParseIntPipe) id: number,
+    @Res({ passthrough: true }) res: FastifyReply,
+  ): Promise<StreamableFile> {
+    // Ids beyond Postgres INT4 can't exist; avoid a Prisma range error (500).
+    if (id < 1 || id > MAX_INT4) throw new NotFoundException('Avatar not found');
+    const file: UserAvatarFile = await this.queryBus.execute(new GetUserAvatarQuery(id));
+
+    // Open before sending headers: the file may vanish between the stat and here (avatar replaced).
+    const stream = createReadStream(file.absolutePath);
+    try {
+      await once(stream, 'open');
+    } catch {
+      throw new NotFoundException('Avatar not found');
+    }
+    res.header('Content-Type', file.mimeType);
+    res.header('Content-Length', file.size);
+    res.header('X-Content-Type-Options', 'nosniff');
+    return new StreamableFile(stream);
   }
 }

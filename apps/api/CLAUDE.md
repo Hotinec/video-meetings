@@ -32,6 +32,7 @@ All tests are e2e (no unit tests). They boot the full NestJS app against a real 
 - `users.e2e-spec.ts` — `GET /users/me` (200 fields, 401 without/invalid token, 404 for a deleted user) and `PATCH /users/me` (200, 400 invalid, 409 duplicate with different case, 401)
 - `user-username-migration.e2e-spec.ts` — applies the migrations to a scratch database (`video_meetings_migration_test`, created and dropped by the test), inserts users, runs the username migration and checks the backfilled usernames are unique
 - `user-avatar.e2e-spec.ts` — `POST /users/me/avatar` (valid jpg/png/webp, replacement deletes the old file, DB failure leaves no orphan, wrong type, spoofed content, over 5 MB, no file, 401; temporary `UPLOAD_DIR`)
+- `user-avatar-get.e2e-spec.ts` — `GET /users/:id/avatar` (streams with the right `Content-Type`, `avatarUrl` points to it, 404 without avatar or unknown user, 401)
 - `meeting-files.e2e-spec.ts` — file upload, list, download and delete (uses a temporary `UPLOAD_DIR`)
 - `meeting-files-flow.e2e-spec.ts` — the PRD's end-to-end story in one test: upload → list → download → delete (host only), plus the 400 cases
 
@@ -112,7 +113,9 @@ Commands and queries:
 
 `POST /users/me/avatar` (multipart, field `file`): early MIME check (`image/jpeg|png|webp`), 5 MB cap via a per-request `req.file({ limits })` override (400 when exceeded, independent of `MAX_UPLOAD_BYTES`), 400 without a file, 401 without a token. Only the token user's avatar can be changed.
 
-`UsersApiModule` (`users/users-api.module.ts`) holds `UsersController` (`GET` and `PATCH /users/me`, `POST /users/me/avatar`, `JwtAuthGuard`). It is separate from `UsersModule` because `AuthModule` imports `UsersModule` and the controller needs `AuthModule`'s JWT.
+`GET /users/:id/avatar` (`GetUserAvatarQuery`, JWT required): streams the image with `Content-Type` derived from the stored extension and `X-Content-Type-Options: nosniff`; 404 for an unknown user, no avatar, or a missing disk file; 401 without a token.
+
+`UsersApiModule` (`users/users-api.module.ts`) holds `UsersController` (`GET` and `PATCH /users/me`, `POST /users/me/avatar`, `GET /users/:id/avatar`, `JwtAuthGuard`). It is separate from `UsersModule` because `AuthModule` imports `UsersModule` and the controller needs `AuthModule`'s JWT.
 
 ### AuthModule (`auth/`)
 
