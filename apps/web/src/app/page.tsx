@@ -64,17 +64,20 @@ export default async function HomePage() {
     >
       <div className="mx-auto w-full max-w-3xl flex flex-col gap-8 py-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <Avatar username={profile.username} />
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold">Video Meetings</h1>
-              <p
+          <div className="flex flex-col gap-1 min-w-0">
+            <h1 className="text-xl font-bold">Video Meetings</h1>
+            <Link
+              href="/profile"
+              className="flex items-center gap-3 min-w-0 min-h-11 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            >
+              <Avatar username={profile.username} />
+              <span
                 className="text-sm break-all"
                 style={{ color: 'color-mix(in oklch, var(--muted), black 25%)' }}
               >
                 Signed in as <span style={{ color: 'var(--foreground)' }}>{profile.username}</span>
-              </p>
-            </div>
+              </span>
+            </Link>
           </div>
           <LogoutButton />
         </header>

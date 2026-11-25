@@ -29,6 +29,7 @@ npm run build
 # Test
 npm run test:e2e:api   # API e2e (needs Postgres, wipes the dev DB)
 npm run test:web       # web component tests
+npm run test:e2e --workspace=@video-meetings/web  # Playwright e2e (needs web :3000 + API :3001 running)
 
 # Lint
 npm run lint

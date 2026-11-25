@@ -17,6 +17,8 @@ npm run build    # production build
 npm run start    # start production server
 npm run lint     # lint src/
 npm test         # run component/unit tests (vitest)
+npm run test:e2e # Playwright e2e (e2e/); needs web :3000 and API :3001 running.
+                 # One-time: `npx playwright install chromium`, or set PW_CHANNEL=chrome to use system Chrome
 ```
 
 ## Structure
@@ -25,17 +27,20 @@ npm test         # run component/unit tests (vitest)
 src/
   app/           # App Router pages and layouts
     page.tsx     # home "/" — server component, requires login: shows the API profile's username with an initials avatar, latest 3 + all meetings, Log Out
+    profile/     # "/profile" (server component): avatar placeholder, username, read-only email; redirects to /login without a token
     login/       # login page
     signup/      # registration page
     meetings/[id]/ # meeting page (server component): title, date and the Files section
     api/auth/    # route handlers (login, register, logout) that proxy to the API and manage the cookie
-    api/users/me/  # proxy route: GET the current user's profile (adds the cookie JWT)
+    api/users/me/  # proxy route: GET the current user's profile, PATCH to update the username (adds the cookie JWT)
     api/meetings/[id]/files/  # proxy routes: GET list, POST upload (streams the body), [fileId] DELETE, [fileId]/download
   components/    # shared UI (icons, AuthShell, SectionCard, LogoutButton, FilesPanel)
   lib/           # session.ts (cookie + API_URL), auth-proxy.ts, auth.ts (client calls), meetings.ts,
                  # files-proxy.ts (server: forwards to the API with the cookie's JWT), meeting-files.ts (browser client),
-                 # file-rules.ts (allowlist + size cap), file-kind.ts (icon kind), meeting-id.ts
-  middleware.ts  # redirects to /login when the `token` cookie is missing (matches / and /meetings/*)
+                 # file-rules.ts (allowlist + size cap), file-kind.ts (icon kind), meeting-id.ts,
+                 # username-rules.ts (mirrors the API's username rules; change both together), users.ts (fetchProfile: 401/404 -> logout)
+  middleware.ts  # redirects to /login when the `token` cookie is missing (matches /, /meetings/* and /profile)
+e2e/             # Playwright specs (profile.spec.ts: /profile redirect, username update, duplicate); config in playwright.config.ts
 vitest.config.mts, vitest.setup.ts  # test config (jsdom, `@` alias, jest-dom matchers)
 ```
 

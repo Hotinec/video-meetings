@@ -12,3 +12,5 @@ uploads/
 .playwright-mcp/
 *.tsbuildinfo
 /screenshot-*.png
+/apps/web/test-results/
+/apps/web/playwright-report/

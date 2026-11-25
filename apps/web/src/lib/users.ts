@@ -15,7 +15,8 @@ export async function fetchProfile(token: string): Promise<Profile> {
     headers: { Authorization: `Bearer ${token}` },
     cache: 'no-store',
   });
-  if (res.status === 401) throw new UnauthorizedError();
+  // 404: the token is valid but its user is gone, so the session is unusable; log out.
+  if (res.status === 401 || res.status === 404) throw new UnauthorizedError();
   if (!res.ok) throw new Error('Failed to load profile');
   return res.json();
 }
