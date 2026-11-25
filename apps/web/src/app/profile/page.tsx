@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Avatar } from '@/components/avatar';
 import { AvatarForm } from '@/components/avatar-form';
+import { PasswordForm } from '@/components/password-form';
 import { SectionCard } from '@/components/section-card';
 import { UsernameForm } from '@/components/username-form';
 import { UnauthorizedError } from '@/lib/meetings';
@@ -50,6 +51,10 @@ export default async function ProfilePage() {
 
         <SectionCard title="Username" description="How other people see you">
           <UsernameForm username={profile.username} />
+        </SectionCard>
+
+        <SectionCard title="Password" description="Choose a new password for your account">
+          <PasswordForm />
         </SectionCard>
 
         <SectionCard title="Account" description="Your account details">

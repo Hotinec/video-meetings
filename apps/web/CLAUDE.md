@@ -27,12 +27,13 @@ npm run test:e2e # Playwright e2e (e2e/); needs web :3000 and API :3001 running.
 src/
   app/           # App Router pages and layouts
     page.tsx     # home "/" — server component, requires login: shows the API profile's username with an initials avatar, latest 3 + all meetings, Log Out
-    profile/     # "/profile" (server component): avatar placeholder, avatar form (`AvatarForm`: file picker, blob preview, type/size check via `lib/avatar-rules.ts` mirroring the API, loading/error/success states; the old avatar stays on error), username, read-only email; redirects to /login without a token
+    profile/     # "/profile" (server component): avatar placeholder, avatar form (`AvatarForm`: file picker, blob preview, type/size check via `lib/avatar-rules.ts` mirroring the API, loading/error/success states; the old avatar stays on error), username, password form (`PasswordForm`: current/new/confirm, client-side match check, inline errors, input kept on failure, fields cleared on success; a 401 only logs out when its message is `Unauthorized`, since a wrong old password is also a 401), read-only email; redirects to /login without a token
     login/       # login page
     signup/      # registration page
     meetings/[id]/ # meeting page (server component): title, date and the Files section
     api/auth/    # route handlers (login, register, logout) that proxy to the API and manage the cookie
     api/users/me/  # proxy route: GET the current user's profile, PATCH to update the username (adds the cookie JWT)
+    api/users/me/password/  # proxy route: POST password change (4 KB body cap; relays the API's 204 with no body)
     api/users/me/avatar/  # proxy route: POST avatar upload (streams the multipart body; 413 above 6 MB declared)
     api/users/[id]/avatar/  # proxy route: GET the avatar image (cookie JWT added, so it works in an <img>; `Cache-Control: private, no-cache`; 404 for invalid ids)
     api/meetings/[id]/files/  # proxy routes: GET list, POST upload (streams the body), [fileId] DELETE, [fileId]/download
