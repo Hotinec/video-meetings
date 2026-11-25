@@ -70,7 +70,11 @@ export default async function HomePage() {
               href="/profile"
               className="flex items-center gap-3 min-w-0 min-h-11 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             >
-              <Avatar username={profile.username} />
+              <Avatar
+                username={profile.username}
+                userId={profile.id}
+                avatarUrl={profile.avatarUrl}
+              />
               <span
                 className="text-sm break-all"
                 style={{ color: 'color-mix(in oklch, var(--muted), black 25%)' }}
