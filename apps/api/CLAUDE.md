@@ -78,7 +78,7 @@ src/
   prisma/           # PrismaService (global client w/ pg adapter)
 test/               # e2e specs (*.e2e-spec.ts)
 uploads/            # runtime upload root (UPLOAD_DIR; gitignored): meetings/{meetingId}/{fileId}, tmp/ for in-flight uploads
-prisma/             # schema.prisma + migrations (config: prisma7.config.ts)
+prisma/             # schema.prisma + migrations (config: prisma7.config.ts). `User.username` is unique, case-insensitive (Postgres `citext` extension, created by the migration); `User.avatarPath` is nullable (path relative to UPLOAD_DIR). The migration backfills usernames with the same rules as `users/username.ts` — change both together
 ```
 
 ## Modules
@@ -99,7 +99,7 @@ Owns all user data operations. Has no HTTP surface.
 
 Commands and queries:
 
-- `CreateUserCommand(email, password)` → hashes password with bcrypt, creates row, returns `User`
+- `CreateUserCommand(email, password)` → hashes password with bcrypt, derives a unique username from the email local part (`users/username.ts`: lowercased, invalid chars → `_`, padded to 3, max 30, numeric suffix on collision; retries on a concurrent-signup race), creates row, returns `User`
 - `FindUserByEmailQuery(email)` → `prisma.user.findUnique`, returns `User | null`
 
 ### AuthModule (`auth/`)
