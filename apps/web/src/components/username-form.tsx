@@ -34,10 +34,15 @@ export function UsernameForm({ username }: { username: string }) {
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         const message = Array.isArray(body?.message) ? body.message[0] : body?.message;
-        setError(message || 'Could not save your username. Please try again.');
+        setError(
+          typeof message === 'string' && message
+            ? message
+            : 'Could not save your username. Please try again.',
+        );
         return;
       }
-      setValue(next);
+      const updated = await res.json().catch(() => null);
+      setValue(typeof updated?.username === 'string' ? updated.username : next);
       setSaved(true);
       router.refresh();
     } catch {
@@ -48,7 +53,7 @@ export function UsernameForm({ username }: { username: string }) {
   };
 
   return (
-    <Form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+    <Form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="username">Username</Label>
         <Input
