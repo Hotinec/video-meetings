@@ -43,7 +43,7 @@ src/
                  # file-rules.ts (allowlist + size cap), file-kind.ts (icon kind), meeting-id.ts,
                  # username-rules.ts (mirrors the API's username rules; change both together), users.ts (fetchProfile: 401/404 -> logout)
   middleware.ts  # redirects to /login when the `token` cookie is missing (matches /, /meetings/* and /profile)
-e2e/             # Playwright specs (profile.spec.ts: /profile redirect, username update, duplicate; avatar.spec.ts: avatar upload shown on /profile and home, invalid type keeps the old avatar); config in playwright.config.ts
+e2e/             # Playwright specs (profile.spec.ts: /profile redirect, username update, duplicate; avatar.spec.ts: avatar upload shown on /profile and home, invalid type keeps the old avatar; password.spec.ts: password change logs in only with the new one, wrong current password shows an error and keeps the old one); config in playwright.config.ts
 vitest.config.mts, vitest.setup.ts  # test config (jsdom, `@` alias, jest-dom matchers)
 ```
 
