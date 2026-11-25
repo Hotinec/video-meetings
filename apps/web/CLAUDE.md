@@ -17,6 +17,8 @@ npm run build    # production build
 npm run start    # start production server
 npm run lint     # lint src/
 npm test         # run component/unit tests (vitest)
+npm run test:e2e # Playwright e2e (e2e/); needs web :3000 and API :3001 running.
+                 # One-time: `npx playwright install chromium`, or set PW_CHANNEL=chrome to use system Chrome
 ```
 
 ## Structure
@@ -37,6 +39,7 @@ src/
                  # files-proxy.ts (server: forwards to the API with the cookie's JWT), meeting-files.ts (browser client),
                  # file-rules.ts (allowlist + size cap), file-kind.ts (icon kind), meeting-id.ts
   middleware.ts  # redirects to /login when the `token` cookie is missing (matches /, /meetings/* and /profile)
+e2e/             # Playwright specs (profile.spec.ts: /profile redirect, username update, duplicate); config in playwright.config.ts
 vitest.config.mts, vitest.setup.ts  # test config (jsdom, `@` alias, jest-dom matchers)
 ```
 
