@@ -94,4 +94,69 @@ describe('Users (e2e)', () => {
         .expect(404);
     });
   });
+
+  describe('PATCH /users/me', () => {
+    const patch = (body: object, t: string | null = token) => {
+      const req = request(app.getHttpServer()).patch('/users/me');
+      if (t) req.set('Authorization', `Bearer ${t}`);
+      return req.send(body);
+    };
+
+    it('200 - updates the username and returns the profile', async () => {
+      const res = await patch({ username: 'new_name-1' }).expect(200);
+      expect(res.body.username).toBe('new_name-1');
+      expect(res.body.email).toBe('profile@example.com');
+      const me = await request(app.getHttpServer())
+        .get('/users/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(me.body.username).toBe('new_name-1');
+    });
+
+    it('200 - allows changing only the case of own username', async () => {
+      const res = await patch({ username: 'New_Name-1' }).expect(200);
+      expect(res.body.username).toBe('New_Name-1');
+    });
+
+    it.each(['ab', 'a'.repeat(31), 'bad name', 'bad@name', 'héllo', ''])(
+      '400 - rejects invalid username %p',
+      async (username) => {
+        await patch({ username }).expect(400);
+      },
+    );
+
+    it('400 - rejects a missing or non-string username', async () => {
+      await patch({}).expect(400);
+      await patch({ username: 123 }).expect(400);
+    });
+
+    it('409 - rejects a username taken by another user with different case', async () => {
+      const other = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({ email: 'other@example.com', password: 'password123' });
+      await patch({ username: 'TAKEN_name' }, other.body.token).expect(200);
+
+      await patch({ username: 'taken_NAME' }).expect(409);
+
+      const me = await prisma.user.findUniqueOrThrow({ where: { email: 'profile@example.com' } });
+      expect(me.username).toBe('New_Name-1');
+      const unchanged = await prisma.user.findUniqueOrThrow({
+        where: { email: 'other@example.com' },
+      });
+      expect(unchanged.username).toBe('TAKEN_name');
+    });
+
+    it('only affects the token user', async () => {
+      const before = await prisma.user.findUniqueOrThrow({ where: { email: 'other@example.com' } });
+      await patch({ id: before.id, email: 'x@example.com', username: 'mine_only' }).expect(200);
+      const after = await prisma.user.findUniqueOrThrow({ where: { email: 'other@example.com' } });
+      expect(after.username).toBe(before.username);
+      const mine = await prisma.user.findUniqueOrThrow({ where: { email: 'profile@example.com' } });
+      expect(mine.username).toBe('mine_only');
+    });
+
+    it('401 - without a token', async () => {
+      await patch({ username: 'whoever' }, null).expect(401);
+    });
+  });
 });

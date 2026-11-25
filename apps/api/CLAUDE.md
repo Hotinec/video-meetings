@@ -29,7 +29,7 @@ All tests are e2e (no unit tests). They boot the full NestJS app against a real 
 
 - `auth.e2e-spec.ts` — registration and login endpoints
 - `meetings.e2e-spec.ts` — meeting CRUD endpoints (JWT-protected)
-- `users.e2e-spec.ts` — `GET /users/me` (200 fields, 401 without/invalid token, 404 for a deleted user)
+- `users.e2e-spec.ts` — `GET /users/me` (200 fields, 401 without/invalid token, 404 for a deleted user) and `PATCH /users/me` (200, 400 invalid, 409 duplicate with different case, 401)
 - `user-username-migration.e2e-spec.ts` — applies the migrations to a scratch database (`video_meetings_migration_test`, created and dropped by the test), inserts users, runs the username migration and checks the backfilled usernames are unique
 - `meeting-files.e2e-spec.ts` — file upload, list, download and delete (uses a temporary `UPLOAD_DIR`)
 - `meeting-files-flow.e2e-spec.ts` — the PRD's end-to-end story in one test: upload → list → download → delete (host only), plus the 400 cases
@@ -66,9 +66,9 @@ src/
     decorators/     # @CurrentUser() — extracts JwtPayload from req.user
     commands/       # RegisterUserCommand, LoginUserCommand (delegate user ops to UsersModule via buses)
   users/            # user creation + lookup; exports CqrsModule so callers share the bus
-    commands/       # CreateUserCommand (hashes password, persists user)
+    commands/       # CreateUserCommand (hashes password, persists user), UpdateUsernameCommand
     queries/        # FindUserByEmailQuery, GetCurrentUserQuery
-    users.controller.ts  # GET /users/me (JWT) — wired by UsersApiModule
+    users.controller.ts  # GET + PATCH /users/me (JWT) — wired by UsersApiModule
   meeting/          # CRUD meetings, all routes require JWT
     commands/       # CreateMeetingCommand
     queries/        # GetMeetingsQuery, GetMeetingByIdQuery
@@ -103,10 +103,11 @@ Owns all user data operations. Has no HTTP surface.
 Commands and queries:
 
 - `CreateUserCommand(email, password)` → hashes password with bcrypt, derives a unique username from the email local part (`users/username.ts`: lowercased, invalid chars → `_`, padded to 3, max 30, numeric suffix on collision; retries on a concurrent-signup race), creates row, returns `User`
+- `UpdateUsernameCommand(userId, username)` → updates only the token user's username (DTO: 3–30 chars, letters/digits/`_`/`-`, else 400; `409` if taken, case-insensitive via citext); returns the profile view
 - `FindUserByEmailQuery(email)` → `prisma.user.findUnique`, returns `User | null`
 - `GetCurrentUserQuery(userId)` → `{ id, email, username, avatarUrl }` (`avatarUrl` is `/users/:id/avatar` or null; password/avatarPath never exposed), `NotFoundException` if the user is gone
 
-`UsersApiModule` (`users/users-api.module.ts`) holds `UsersController` (`GET /users/me`, `JwtAuthGuard`). It is separate from `UsersModule` because `AuthModule` imports `UsersModule` and the controller needs `AuthModule`'s JWT.
+`UsersApiModule` (`users/users-api.module.ts`) holds `UsersController` (`GET` and `PATCH /users/me`, `JwtAuthGuard`). It is separate from `UsersModule` because `AuthModule` imports `UsersModule` and the controller needs `AuthModule`'s JWT.
 
 ### AuthModule (`auth/`)
 
