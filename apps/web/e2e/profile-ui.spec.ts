@@ -8,6 +8,21 @@ const viewports = [
   { name: 'mobile', width: 375, height: 812 },
 ];
 
+async function expectNoAxeViolations(page: Page) {
+  await page.addScriptTag({ path: require.resolve('axe-core') });
+  const violations = await page.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await (window as any).axe.run(document, {
+      runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa', 'best-practice'],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return res.violations.map(
+      (v: any) => `${v.id}: ${v.nodes.map((n: any) => n.target).join(' | ')}`,
+    );
+  });
+  expect(violations).toEqual([]);
+}
+
 async function expectNoHorizontalScroll(page: Page) {
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -41,6 +56,13 @@ for (const vp of viewports) {
       await expectNoHorizontalScroll(page);
       await expect(page.getByRole('img', { name: /^Avatar of / }).first()).toBeVisible();
       await page.screenshot({ path: path.join(SHOTS, `home-ui-${vp.name}.png`), fullPage: true });
+    });
+
+    test('passes the axe accessibility audit (contrast, labels, names)', async ({ page }) => {
+      await page.goto('/profile');
+      await expectNoAxeViolations(page);
+      await page.goto('/');
+      await expectNoAxeViolations(page);
     });
 
     test('all forms are reachable and operable with the keyboard', async ({ page }) => {
