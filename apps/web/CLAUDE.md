@@ -29,6 +29,7 @@ src/
     signup/      # registration page
     meetings/[id]/ # meeting page (server component): title, date and the Files section
     api/auth/    # route handlers (login, register, logout) that proxy to the API and manage the cookie
+    api/users/me/  # proxy route: GET the current user's profile (adds the cookie JWT)
     api/meetings/[id]/files/  # proxy routes: GET list, POST upload (streams the body), [fileId] DELETE, [fileId]/download
   components/    # shared UI (icons, AuthShell, SectionCard, LogoutButton, FilesPanel)
   lib/           # session.ts (cookie + API_URL), auth-proxy.ts, auth.ts (client calls), meetings.ts,
