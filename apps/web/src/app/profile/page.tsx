@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Avatar } from '@/components/avatar';
 import { SectionCard } from '@/components/section-card';
+import { UsernameForm } from '@/components/username-form';
 import { UnauthorizedError } from '@/lib/meetings';
 import { getToken } from '@/lib/session';
 import { fetchProfile, type Profile } from '@/lib/users';
@@ -42,14 +43,12 @@ export default async function ProfilePage() {
           </div>
         </header>
 
+        <SectionCard title="Username" description="How other people see you">
+          <UsernameForm username={profile.username} />
+        </SectionCard>
+
         <SectionCard title="Account" description="Your account details">
           <dl className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1">
-              <dt className="text-sm" style={{ color: 'var(--muted)' }}>
-                Username
-              </dt>
-              <dd className="font-medium break-all">{profile.username}</dd>
-            </div>
             <div className="flex flex-col gap-1">
               <dt className="text-sm" style={{ color: 'var(--muted)' }}>
                 Email

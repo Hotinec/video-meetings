@@ -7,7 +7,10 @@ vi.mock('@/lib/session', () => ({ API_URL: 'http://api.test', getToken: () => ge
 const redirect = vi.fn((url: string) => {
   throw new Error(`NEXT_REDIRECT:${url}`);
 });
-vi.mock('next/navigation', () => ({ redirect: (url: string) => redirect(url) }));
+vi.mock('next/navigation', () => ({
+  redirect: (url: string) => redirect(url),
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 const fetchProfile = vi.fn();
 vi.mock('@/lib/users', async (orig) => ({
   ...(await orig<typeof import('@/lib/users')>()),
@@ -48,7 +51,7 @@ describe('/profile page', () => {
 
     expect(screen.getByRole('img', { name: 'Avatar of alice' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Profile' })).toBeInTheDocument();
-    expect(screen.getByText('alice')).toBeInTheDocument();
+    expect(screen.getByLabelText('Username')).toHaveValue('alice');
     expect(screen.getByText('alice@example.com')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /back/i })).toHaveAttribute('href', '/');
   });
