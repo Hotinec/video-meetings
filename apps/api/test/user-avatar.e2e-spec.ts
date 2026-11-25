@@ -94,6 +94,35 @@ describe('POST /users/me/avatar (e2e)', () => {
     expectNoTempFiles();
   });
 
+  it('deletes the previous avatar file when replaced', async () => {
+    await send(PNG, 'a.png', 'image/png').expect(201);
+    const before = (await prisma.user.findUniqueOrThrow({ where: { id: userId } })).avatarPath!;
+    expect(existsSync(join(uploadDir, before))).toBe(true);
+
+    await send(JPEG, 'b.jpg', 'image/jpeg').expect(201);
+    const after = (await prisma.user.findUniqueOrThrow({ where: { id: userId } })).avatarPath!;
+
+    expect(after).not.toBe(before);
+    expect(existsSync(join(uploadDir, before))).toBe(false);
+    expect(existsSync(join(uploadDir, after))).toBe(true);
+    expect(readdirSync(join(uploadDir, 'avatars', String(userId)))).toHaveLength(1);
+  });
+
+  it('keeps the old avatar and leaves no orphan when the DB update fails', async () => {
+    await send(PNG, 'a.png', 'image/png').expect(201);
+    const before = (await prisma.user.findUniqueOrThrow({ where: { id: userId } })).avatarPath!;
+
+    const spy = jest.spyOn(prisma.user, 'update').mockRejectedValueOnce(new Error('db down'));
+    await send(JPEG, 'b.jpg', 'image/jpeg').expect(500);
+    spy.mockRestore();
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    expect(user.avatarPath).toBe(before);
+    expect(existsSync(join(uploadDir, before))).toBe(true);
+    expect(readdirSync(join(uploadDir, 'avatars', String(userId)))).toHaveLength(1);
+    expectNoTempFiles();
+  });
+
   it('rejects a disallowed declared type with 400', async () => {
     await send(PDF, 'doc.pdf', 'application/pdf').expect(400);
     expectNoTempFiles();

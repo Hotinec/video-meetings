@@ -29,7 +29,7 @@ export class UploadAvatarHandler implements ICommandHandler<UploadAvatarCommand,
 
       const exists = await this.prisma.user.findUnique({
         where: { id: userId },
-        select: { id: true },
+        select: { id: true, avatarPath: true },
       });
       if (!exists) throw new NotFoundException('User not found');
 
@@ -38,6 +38,10 @@ export class UploadAvatarHandler implements ICommandHandler<UploadAvatarCommand,
         where: { id: userId },
         data: { avatarPath: storedPath },
       });
+      // The DB now points at the new file; the old one is garbage. Best effort.
+      if (exists.avatarPath && exists.avatarPath !== storedPath) {
+        await this.storage.remove(exists.avatarPath).catch(() => undefined);
+      }
       return toUserProfileView(user);
     } catch (err) {
       await this.storage.remove(storedPath ?? tempPath);

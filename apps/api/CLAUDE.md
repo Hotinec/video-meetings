@@ -31,7 +31,7 @@ All tests are e2e (no unit tests). They boot the full NestJS app against a real 
 - `meetings.e2e-spec.ts` — meeting CRUD endpoints (JWT-protected)
 - `users.e2e-spec.ts` — `GET /users/me` (200 fields, 401 without/invalid token, 404 for a deleted user) and `PATCH /users/me` (200, 400 invalid, 409 duplicate with different case, 401)
 - `user-username-migration.e2e-spec.ts` — applies the migrations to a scratch database (`video_meetings_migration_test`, created and dropped by the test), inserts users, runs the username migration and checks the backfilled usernames are unique
-- `user-avatar.e2e-spec.ts` — `POST /users/me/avatar` (valid jpg/png/webp, wrong type, spoofed content, over 5 MB, no file, 401; temporary `UPLOAD_DIR`)
+- `user-avatar.e2e-spec.ts` — `POST /users/me/avatar` (valid jpg/png/webp, replacement deletes the old file, DB failure leaves no orphan, wrong type, spoofed content, over 5 MB, no file, 401; temporary `UPLOAD_DIR`)
 - `meeting-files.e2e-spec.ts` — file upload, list, download and delete (uses a temporary `UPLOAD_DIR`)
 - `meeting-files-flow.e2e-spec.ts` — the PRD's end-to-end story in one test: upload → list → download → delete (host only), plus the 400 cases
 
@@ -108,7 +108,7 @@ Commands and queries:
 - `FindUserByEmailQuery(email)` → `prisma.user.findUnique`, returns `User | null`
 - `GetCurrentUserQuery(userId)` → `{ id, email, username, avatarUrl }` (`avatarUrl` is `/users/:id/avatar` or null; password/avatarPath never exposed), `NotFoundException` if the user is gone
 
-- `UploadAvatarCommand(userId, tempPath)` → handled in `UsersApiModule` (needs file storage). Detects the real type of the temp file with `file-type` (JPEG, PNG, WebP only; else 400), moves it to `UPLOAD_DIR/avatars/{userId}/{uuid}.{ext}`, sets `User.avatarPath`, returns the profile view. The temp/new file is removed on failure. Replacing does not yet delete the previous file.
+- `UploadAvatarCommand(userId, tempPath)` → handled in `UsersApiModule` (needs file storage). Detects the real type of the temp file with `file-type` (JPEG, PNG, WebP only; else 400), moves it to `UPLOAD_DIR/avatars/{userId}/{uuid}.{ext}`, sets `User.avatarPath`, returns the profile view. The temp/new file is removed on failure. Replacing deletes the previous file after the DB update (best effort); if the update fails the old avatar stays and the new file is removed.
 
 `POST /users/me/avatar` (multipart, field `file`): early MIME check (`image/jpeg|png|webp`), 5 MB cap via a per-request `req.file({ limits })` override (400 when exceeded, independent of `MAX_UPLOAD_BYTES`), 400 without a file, 401 without a token. Only the token user's avatar can be changed.
 
