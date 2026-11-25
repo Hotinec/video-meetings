@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Inject,
   NotFoundException,
   Param,
@@ -23,8 +24,10 @@ import { CurrentUser, JwtPayload } from '../auth/decorators/current-user.decorat
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FILE_STORAGE, FileStorage, TempFile } from '../files/file-storage';
 import { AVATAR_ALLOWED_DESCRIPTION, isAllowedAvatarMime, MAX_AVATAR_BYTES } from './avatar-types';
-import { UploadAvatarCommand } from './commands/upload-avatar.command';
+import { ChangePasswordCommand } from './commands/change-password.command';
 import { UpdateUsernameCommand } from './commands/update-username.command';
+import { UploadAvatarCommand } from './commands/upload-avatar.command';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateUsernameDto } from './dto/update-username.dto';
 import { GetCurrentUserQuery } from './queries/get-current-user.query';
 import { GetUserAvatarQuery, UserAvatarFile } from './queries/get-user-avatar.query';
@@ -52,6 +55,17 @@ export class UsersController {
     @Body() dto: UpdateUsernameDto,
   ): Promise<UserProfileView> {
     return this.commandBus.execute(new UpdateUsernameCommand(user.sub, dto.username));
+  }
+
+  @Post('me/password')
+  @HttpCode(204)
+  async changePassword(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<void> {
+    await this.commandBus.execute(
+      new ChangePasswordCommand(user.sub, dto.oldPassword, dto.newPassword),
+    );
   }
 
   @Post('me/avatar')

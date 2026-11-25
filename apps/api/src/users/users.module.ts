@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { PrismaService } from '../prisma/prisma.service';
+import { ChangePasswordHandler } from './commands/change-password.handler';
 import { CreateUserHandler } from './commands/create-user.handler';
 import { UpdateUsernameHandler } from './commands/update-username.handler';
 import { FindUserByEmailHandler } from './queries/find-user-by-email.handler';
@@ -12,6 +13,7 @@ import { GetCurrentUserHandler } from './queries/get-current-user.handler';
     PrismaService,
     CreateUserHandler,
     UpdateUsernameHandler,
+    ChangePasswordHandler,
     FindUserByEmailHandler,
     GetCurrentUserHandler,
   ],
