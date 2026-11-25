@@ -33,6 +33,8 @@ src/
     meetings/[id]/ # meeting page (server component): title, date and the Files section
     api/auth/    # route handlers (login, register, logout) that proxy to the API and manage the cookie
     api/users/me/  # proxy route: GET the current user's profile, PATCH to update the username (adds the cookie JWT)
+    api/users/me/avatar/  # proxy route: POST avatar upload (streams the multipart body; 413 above 6 MB declared)
+    api/users/[id]/avatar/  # proxy route: GET the avatar image (cookie JWT added, so it works in an <img>; `Cache-Control: private, no-cache`; 404 for invalid ids)
     api/meetings/[id]/files/  # proxy routes: GET list, POST upload (streams the body), [fileId] DELETE, [fileId]/download
   components/    # shared UI (icons, AuthShell, SectionCard, LogoutButton, FilesPanel)
   lib/           # session.ts (cookie + API_URL), auth-proxy.ts, auth.ts (client calls), meetings.ts,
