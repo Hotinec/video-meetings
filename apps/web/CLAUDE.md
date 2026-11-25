@@ -25,17 +25,18 @@ npm test         # run component/unit tests (vitest)
 src/
   app/           # App Router pages and layouts
     page.tsx     # home "/" — server component, requires login: shows the API profile's username with an initials avatar, latest 3 + all meetings, Log Out
+    profile/     # "/profile" (server component): avatar placeholder, username, read-only email; redirects to /login without a token
     login/       # login page
     signup/      # registration page
     meetings/[id]/ # meeting page (server component): title, date and the Files section
     api/auth/    # route handlers (login, register, logout) that proxy to the API and manage the cookie
-    api/users/me/  # proxy route: GET the current user's profile (adds the cookie JWT)
+    api/users/me/  # proxy route: GET the current user's profile, PATCH to update the username (adds the cookie JWT)
     api/meetings/[id]/files/  # proxy routes: GET list, POST upload (streams the body), [fileId] DELETE, [fileId]/download
   components/    # shared UI (icons, AuthShell, SectionCard, LogoutButton, FilesPanel)
   lib/           # session.ts (cookie + API_URL), auth-proxy.ts, auth.ts (client calls), meetings.ts,
                  # files-proxy.ts (server: forwards to the API with the cookie's JWT), meeting-files.ts (browser client),
                  # file-rules.ts (allowlist + size cap), file-kind.ts (icon kind), meeting-id.ts
-  middleware.ts  # redirects to /login when the `token` cookie is missing (matches / and /meetings/*)
+  middleware.ts  # redirects to /login when the `token` cookie is missing (matches /, /meetings/* and /profile)
 vitest.config.mts, vitest.setup.ts  # test config (jsdom, `@` alias, jest-dom matchers)
 ```
 
