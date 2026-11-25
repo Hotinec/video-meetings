@@ -24,7 +24,7 @@ npm test         # run component/unit tests (vitest)
 ```
 src/
   app/           # App Router pages and layouts
-    page.tsx     # home "/" — server component, requires login: shows email, latest 3 + all meetings, Log Out
+    page.tsx     # home "/" — server component, requires login: shows the API profile's username with an initials avatar, latest 3 + all meetings, Log Out
     login/       # login page
     signup/      # registration page
     meetings/[id]/ # meeting page (server component): title, date and the Files section
@@ -43,7 +43,7 @@ vitest.config.mts, vitest.setup.ts  # test config (jsdom, `@` alias, jest-dom ma
 
 - The API's JWT is stored in an **httpOnly, SameSite=Lax cookie** (`token`, 7 days, `Secure` in production) set by the Next route handlers in `app/api/auth/*`. It is never exposed to client JS or localStorage.
 - Server components read the cookie and call the API (`API_URL`, defaults to `http://localhost:3001`) with `Authorization: Bearer`. A 401 from the API sends the user through `GET /api/auth/logout`, which clears the cookie and redirects to `/login`.
-- The email shown on the home page is decoded from the JWT payload for display only; the API verifies the signature.
+- The home page fetches the profile (`lib/users.ts` `fetchProfile`, `GET /users/me`) and shows the username with an initials `Avatar` placeholder. The JWT is only decoded for the user id (`userIdFromToken`), for display decisions; the API verifies the signature.
 
 ## Meeting files
 
