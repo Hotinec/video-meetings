@@ -30,6 +30,7 @@ All tests are e2e (no unit tests). They boot the full NestJS app against a real 
 - `auth.e2e-spec.ts` — registration and login endpoints
 - `meetings.e2e-spec.ts` — meeting CRUD endpoints (JWT-protected)
 - `users.e2e-spec.ts` — `GET /users/me` (200 fields, 401 without/invalid token, 404 for a deleted user)
+- `user-username-migration.e2e-spec.ts` — applies the migrations to a scratch database (`video_meetings_migration_test`, created and dropped by the test), inserts users, runs the username migration and checks the backfilled usernames are unique
 - `meeting-files.e2e-spec.ts` — file upload, list, download and delete (uses a temporary `UPLOAD_DIR`)
 - `meeting-files-flow.e2e-spec.ts` — the PRD's end-to-end story in one test: upload → list → download → delete (host only), plus the 400 cases
 
@@ -146,9 +147,9 @@ Commands and queries:
 
 Owns meeting file upload, listing, download and delete. All routes are protected by `JwtAuthGuard`.
 
-| Concern       | Details                                                                 |
-| ------------- | ----------------------------------------------------------------------- |
-| **Imports**   | `CqrsModule`, `AuthModule`                                              |
+| Concern       | Details                                                                                                               |
+| ------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Imports**   | `CqrsModule`, `AuthModule`                                                                                            |
 | **Providers** | `PrismaService`, `UploadFileHandler`, `DeleteFileHandler`, `GetMeetingFilesHandler`, `GetMeetingFileHandler`, storage |
 
 - `POST /meetings/:id/files` — checks the meeting exists (404), streams the file to `UPLOAD_DIR/tmp`, then `UploadFileCommand` moves it to `meetings/{meetingId}/{fileId}` and saves the row. The temp file is removed on any failure.

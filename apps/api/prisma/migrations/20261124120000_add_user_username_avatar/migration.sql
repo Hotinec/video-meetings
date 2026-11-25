@@ -18,11 +18,11 @@ DECLARE
   n INT;
 BEGIN
   FOR r IN SELECT "id", "email" FROM "User" ORDER BY "id" LOOP
-    base := rpad(
-      left(regexp_replace(lower(split_part(r."email", '@', 1)), '[^a-z0-9_-]', '_', 'g'), 30),
-      3,
-      '_'
-    );
+    base := left(regexp_replace(lower(split_part(r."email", '@', 1)), '[^a-z0-9_-]', '_', 'g'), 30);
+    -- rpad would truncate longer strings, so only pad short ones.
+    IF length(base) < 3 THEN
+      base := rpad(base, 3, '_');
+    END IF;
     candidate := base;
     n := 1;
     WHILE EXISTS (SELECT 1 FROM "User" WHERE "username" = candidate::citext) LOOP
