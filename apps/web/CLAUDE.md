@@ -27,7 +27,7 @@ npm run test:e2e # Playwright e2e (e2e/); needs web :3000 and API :3001 running.
 src/
   app/           # App Router pages and layouts
     page.tsx     # home "/" — server component, requires login: shows the API profile's username with an initials avatar, latest 3 + all meetings, Log Out
-    profile/     # "/profile" (server component): avatar placeholder, username, read-only email; redirects to /login without a token
+    profile/     # "/profile" (server component): avatar placeholder, avatar form (`AvatarForm`: file picker, blob preview, type/size check via `lib/avatar-rules.ts` mirroring the API, loading/error/success states; the old avatar stays on error), username, read-only email; redirects to /login without a token
     login/       # login page
     signup/      # registration page
     meetings/[id]/ # meeting page (server component): title, date and the Files section

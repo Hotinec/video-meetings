@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Avatar } from '@/components/avatar';
+import { AvatarForm } from '@/components/avatar-form';
 import { SectionCard } from '@/components/section-card';
 import { UsernameForm } from '@/components/username-form';
 import { UnauthorizedError } from '@/lib/meetings';
@@ -42,6 +43,10 @@ export default async function ProfilePage() {
             <h1 className="text-xl font-bold">Profile</h1>
           </div>
         </header>
+
+        <SectionCard title="Avatar" description="A JPEG, PNG or WebP image">
+          <AvatarForm />
+        </SectionCard>
 
         <SectionCard title="Username" description="How other people see you">
           <UsernameForm username={profile.username} />
