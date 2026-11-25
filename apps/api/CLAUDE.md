@@ -103,7 +103,7 @@ Owns all user data operations. Has no HTTP surface.
 Commands and queries:
 
 - `CreateUserCommand(email, password)` → hashes password with bcrypt, derives a unique username from the email local part (`users/username.ts`: lowercased, invalid chars → `_`, padded to 3, max 30, numeric suffix on collision; retries on a concurrent-signup race), creates row, returns `User`
-- `UpdateUsernameCommand(userId, username)` → updates only the token user's username (DTO: 3–30 chars, letters/digits/`_`/`-`, else 400; `409` if taken, case-insensitive via citext); returns the profile view
+- `UpdateUsernameCommand(userId, username)` → updates only the token user's username (DTO: 3–30 chars, letters/digits/`_`/`-`, else 400; `409` if taken, case-insensitive via citext); returns the profile view (both handlers build it with `toUserProfileView` in `users/user-profile.view.ts`, the single place a `User` row becomes a response)
 - `FindUserByEmailQuery(email)` → `prisma.user.findUnique`, returns `User | null`
 - `GetCurrentUserQuery(userId)` → `{ id, email, username, avatarUrl }` (`avatarUrl` is `/users/:id/avatar` or null; password/avatarPath never exposed), `NotFoundException` if the user is gone
 

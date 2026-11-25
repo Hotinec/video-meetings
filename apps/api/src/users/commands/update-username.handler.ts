@@ -2,7 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UserProfileView } from '../user-profile.view';
+import { toUserProfileView, UserProfileView } from '../user-profile.view';
 import { UpdateUsernameCommand } from './update-username.command';
 
 @CommandHandler(UpdateUsernameCommand)
@@ -16,12 +16,7 @@ export class UpdateUsernameHandler implements ICommandHandler<
     try {
       // `username` is citext, so uniqueness is case-insensitive.
       const user = await this.prisma.user.update({ where: { id: userId }, data: { username } });
-      return {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        avatarUrl: user.avatarPath ? `/users/${user.id}/avatar` : null,
-      };
+      return toUserProfileView(user);
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
         if (err.code === 'P2002') throw new ConflictException('Username is already taken');
