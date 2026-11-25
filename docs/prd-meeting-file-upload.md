@@ -44,14 +44,14 @@ Enable users to attach files (meeting recordings, transcripts, documents) to a s
 
 ## Definition of Done
 
-- [ ] The `MeetingFile` model has been added to the Prisma schema, and the migration has been applied.
-- [ ] `POST /meetings/:id/files` accepts a file, saves it to disk, and records its metadata in the database.
-- [ ] `GET /meetings/:id/files` returns a list of the meeting's files, including their metadata.
-- [ ] `GET /meetings/:id/files/:fileId/download` streams the file from the disk with the correct `Content-Disposition` header.
-- [ ] `DELETE /meetings/:id/files/:fileId` removes the file from both the disk and the database. accessible only to the meeting owner
-- [ ] Uploading a file > 100 MB or an invalid file type returns a 400 status code with an error description
-- [ ] The meeting page includes a "Files" tab/section with a drag-and-drop area and a list of files
-- [ ] A progress bar is displayed during file upload
-- [ ] Clicking on a file triggers a download via the `/download` endpoint
-- [ ] The file deletion button is visible only to the meeting owner and functions without requiring a page reload
-- [ ] An E2E test covers the following scenario: upload → display → download → deletion
+- [x] The `MeetingFile` model has been added to the Prisma schema, and the migration has been applied.
+- [x] `POST /meetings/:id/files` accepts a file, saves it to disk, and records its metadata in the database.
+- [x] `GET /meetings/:id/files` returns a list of the meeting's files, including their metadata.
+- [x] `GET /meetings/:id/files/:fileId/download` streams the file from the disk with the correct `Content-Disposition` header.
+- [x] `DELETE /meetings/:id/files/:fileId` removes the file from both the disk and the database. accessible only to the meeting owner
+- [x] Uploading a file > 100 MB or an invalid file type returns a 400 status code with an error description
+- [x] The meeting page includes a "Files" tab/section with a drag-and-drop area and a list of files
+- [x] A progress bar is displayed during file upload
+- [x] Clicking on a file triggers a download via the `/download` endpoint
+- [x] The file deletion button is visible only to the meeting owner and functions without requiring a page reload
+- [x] An E2E test covers the following scenario: upload → display → download → deletion

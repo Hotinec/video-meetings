@@ -29,7 +29,10 @@ All tests are e2e (no unit tests). They boot the full NestJS app against a real 
 
 - `auth.e2e-spec.ts` — registration and login endpoints
 - `meetings.e2e-spec.ts` — meeting CRUD endpoints (JWT-protected)
-- `meeting-files.e2e-spec.ts` — file upload and list (uses a temporary `UPLOAD_DIR`)
+- `users.e2e-spec.ts` — `GET /users/me` (200 fields, 401 without/invalid token, 404 for a deleted user)
+- `user-username-migration.e2e-spec.ts` — applies the migrations to a scratch database (`video_meetings_migration_test`, created and dropped by the test), inserts users, runs the username migration and checks the backfilled usernames are unique
+- `meeting-files.e2e-spec.ts` — file upload, list, download and delete (uses a temporary `UPLOAD_DIR`)
+- `meeting-files-flow.e2e-spec.ts` — the PRD's end-to-end story in one test: upload → list → download → delete (host only), plus the 400 cases
 
 **Prerequisites:**
 
@@ -55,7 +58,7 @@ Tests run serially (`--runInBand`) and each suite cleans up its own database row
 
 ```
 src/
-  app.module.ts     # root module — imports AuthModule, MeetingModule, FilesModule
+  app.module.ts     # root module — imports AuthModule, MeetingModule, FilesModule, UsersApiModule
   app.setup.ts      # shared app setup (multipart limits, ValidationPipe) used by main.ts and e2e
   main.ts           # entry point (Fastify adapter), listens on :3001, CORS, calls setupApp
   auth/             # token generation + validation, exports JwtModule; imports UsersModule
@@ -64,17 +67,21 @@ src/
     commands/       # RegisterUserCommand, LoginUserCommand (delegate user ops to UsersModule via buses)
   users/            # user creation + lookup; exports CqrsModule so callers share the bus
     commands/       # CreateUserCommand (hashes password, persists user)
-    queries/        # FindUserByEmailQuery
+    queries/        # FindUserByEmailQuery, GetCurrentUserQuery
+    users.controller.ts  # GET /users/me (JWT) — wired by UsersApiModule
   meeting/          # CRUD meetings, all routes require JWT
     commands/       # CreateMeetingCommand
     queries/        # GetMeetingsQuery, GetMeetingByIdQuery
     dto/            # CreateMeetingDto (title, date)
-  files/            # meeting file upload/list (POST/GET /meetings/:id/files), JWT-protected
-    commands/       # UploadFileCommand
-    queries/        # GetMeetingFilesQuery
+  files/            # meeting file upload/list/download/delete (/meetings/:id/files), JWT-protected
+    commands/       # UploadFileCommand, DeleteFileCommand
+    queries/        # GetMeetingFilesQuery, GetMeetingFileQuery
+    allowed-types.ts      # allowlist: extension -> MIME types + content-derived extensions
+    content-disposition.ts # attachment header with ASCII fallback + UTF-8 filename*
   prisma/           # PrismaService (global client w/ pg adapter)
 test/               # e2e specs (*.e2e-spec.ts)
-prisma/             # schema.prisma + migrations (config: prisma7.config.ts)
+uploads/            # runtime upload root (UPLOAD_DIR; gitignored): meetings/{meetingId}/{fileId}, tmp/ for in-flight uploads
+prisma/             # schema.prisma + migrations (config: prisma7.config.ts). `User.username` is unique, case-insensitive (Postgres `citext` extension, created by the migration); `User.avatarPath` is nullable (path relative to UPLOAD_DIR). The migration backfills usernames with the same rules as `users/username.ts` — change both together
 ```
 
 ## Modules
@@ -95,8 +102,11 @@ Owns all user data operations. Has no HTTP surface.
 
 Commands and queries:
 
-- `CreateUserCommand(email, password)` → hashes password with bcrypt, creates row, returns `User`
+- `CreateUserCommand(email, password)` → hashes password with bcrypt, derives a unique username from the email local part (`users/username.ts`: lowercased, invalid chars → `_`, padded to 3, max 30, numeric suffix on collision; retries on a concurrent-signup race), creates row, returns `User`
 - `FindUserByEmailQuery(email)` → `prisma.user.findUnique`, returns `User | null`
+- `GetCurrentUserQuery(userId)` → `{ id, email, username, avatarUrl }` (`avatarUrl` is `/users/:id/avatar` or null; password/avatarPath never exposed), `NotFoundException` if the user is gone
+
+`UsersApiModule` (`users/users-api.module.ts`) holds `UsersController` (`GET /users/me`, `JwtAuthGuard`). It is separate from `UsersModule` because `AuthModule` imports `UsersModule` and the controller needs `AuthModule`'s JWT.
 
 ### AuthModule (`auth/`)
 
@@ -135,15 +145,21 @@ Commands and queries:
 
 ### FilesModule (`files/`)
 
-Owns meeting file upload and listing. All routes are protected by `JwtAuthGuard`.
+Owns meeting file upload, listing, download and delete. All routes are protected by `JwtAuthGuard`.
 
-| Concern       | Details                                                                 |
-| ------------- | ----------------------------------------------------------------------- |
-| **Imports**   | `CqrsModule`, `AuthModule`                                              |
-| **Providers** | `PrismaService`, `UploadFileHandler`, `GetMeetingFilesHandler`, storage |
+| Concern       | Details                                                                                                               |
+| ------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Imports**   | `CqrsModule`, `AuthModule`                                                                                            |
+| **Providers** | `PrismaService`, `UploadFileHandler`, `DeleteFileHandler`, `GetMeetingFilesHandler`, `GetMeetingFileHandler`, storage |
 
 - `POST /meetings/:id/files` — checks the meeting exists (404), streams the file to `UPLOAD_DIR/tmp`, then `UploadFileCommand` moves it to `meetings/{meetingId}/{fileId}` and saves the row. The temp file is removed on any failure.
 - `GET /meetings/:id/files` — `GetMeetingFilesQuery` returns metadata, newest first. `filePath` is never exposed.
+- `GET /meetings/:id/files/:fileId/download` — `GetMeetingFileQuery` (404 for an unknown file, another meeting's file, a missing disk file, or a path outside `UPLOAD_DIR`). Streams with `StreamableFile`; always `Content-Disposition: attachment` plus `X-Content-Type-Options: nosniff`. No `Range` support.
+- `DELETE /meetings/:id/files/:fileId` — `DeleteFileCommand`, host only (`meeting.hostId === user.id`). 204 on success; 404 for an unknown meeting, unknown file, or a file of another meeting; 403 for a non-host. Removes the DB row, then the disk file; a missing disk file, a disk error (logged) or a path outside `UPLOAD_DIR` never blocks the DB delete.
+
+Upload validation (all failures are 400 and leave nothing on disk): an early name + MIME check on client data (mp4, mov, webm, mp3, m4a, wav, pdf, docx, xlsx, pptx, txt), then a magic-byte check of the temp file with `file-type`. `txt` has no signature, so it must have none detected. Oversize uploads are rejected whether the plugin reports an error or a truncated stream.
+
+`file-type` is pinned to v16 (last CommonJS release); newer versions are ESM-only and break Jest.
 
 ### Module dependency graph
 
@@ -224,3 +240,7 @@ Every module that uses the bus must import `CqrsModule` and list all handlers in
 - Part of the `@video-meetings/api` workspace
 - Linting and Prettier config inherited from monorepo root
 - Decorators enabled: `emitDecoratorMetadata`, `experimentalDecorators`
+
+## File upload
+
+Use this research for it: @docs/research-meeting-file-upload.md

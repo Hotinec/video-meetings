@@ -71,6 +71,64 @@ describe('Auth (e2e)', () => {
     });
   });
 
+  // ─── Username at signup ──────────────────────────────────────────────────────
+
+  describe('username at signup', () => {
+    const register = (email: string) =>
+      request(app.getHttpServer())
+        .post('/auth/register')
+        .send({ email, password: 'password123' })
+        .expect(201);
+
+    const usernameOf = async (email: string) =>
+      (await prisma.user.findUniqueOrThrow({ where: { email } })).username;
+
+    it('derives the username from the email local part', async () => {
+      expect(await usernameOf('alice@example.com')).toBe('alice');
+    });
+
+    it('starts with no avatar', async () => {
+      const user = await prisma.user.findUniqueOrThrow({ where: { email: 'alice@example.com' } });
+      expect(user.avatarPath).toBeNull();
+    });
+
+    it('adds a numeric suffix when the username is taken (case-insensitive)', async () => {
+      await register('Alice@other.com');
+      expect(await usernameOf('Alice@other.com')).toBe('alice2');
+
+      await register('alice@third.com');
+      expect(await usernameOf('alice@third.com')).toBe('alice3');
+    });
+
+    it('replaces characters outside letters, digits, _ and - with _', async () => {
+      await register('john.doe+tag@example.com');
+      expect(await usernameOf('john.doe+tag@example.com')).toBe('john_doe_tag');
+    });
+
+    it('pads a local part shorter than 3 characters', async () => {
+      await register('jo@example.com');
+      const username = await usernameOf('jo@example.com');
+      expect(username).toMatch(/^[a-z0-9_-]{3,30}$/);
+      expect(username).toContain('jo');
+    });
+
+    it('truncates a long local part to 30 characters, suffix included', async () => {
+      const local = 'a'.repeat(40);
+      await register(`${local}@example.com`);
+      await register(`${local}@other.com`);
+      expect(await usernameOf(`${local}@example.com`)).toBe('a'.repeat(30));
+      expect(await usernameOf(`${local}@other.com`)).toBe(`${'a'.repeat(29)}2`);
+    });
+
+    it('the database rejects a username that differs only by case', async () => {
+      await expect(
+        prisma.user.create({
+          data: { email: 'case@example.com', password: 'x', username: 'ALICE' },
+        }),
+      ).rejects.toMatchObject({ code: 'P2002' });
+    });
+  });
+
   // ─── Login ───────────────────────────────────────────────────────────────────
 
   describe('POST /auth/login', () => {

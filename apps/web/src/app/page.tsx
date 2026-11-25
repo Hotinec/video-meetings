@@ -1,9 +1,12 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { CalendarIcon, VideoIcon } from '@/components/icons';
+import { Avatar } from '@/components/avatar';
+import { CalendarIcon } from '@/components/icons';
 import { LogoutButton } from '@/components/logout-button';
 import { SectionCard } from '@/components/section-card';
 import { fetchMeetings, UnauthorizedError, type Meeting } from '@/lib/meetings';
-import { emailFromToken, getToken } from '@/lib/session';
+import { getToken } from '@/lib/session';
+import { fetchProfile, type Profile } from '@/lib/users';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +20,12 @@ function MeetingList({ meetings }: { meetings: Meeting[] }) {
           key={m.id}
           className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4 py-3 first:pt-0 last:pb-0"
         >
-          <span className="font-medium break-words min-w-0">{m.title}</span>
+          <Link
+            href={`/meetings/${m.id}`}
+            className="font-medium break-words min-w-0 underline-offset-4 hover:underline focus-visible:underline"
+          >
+            {m.title}
+          </Link>
           <span
             className="flex items-center gap-1.5 text-sm shrink-0"
             style={{ color: 'var(--muted)' }}
@@ -36,14 +44,14 @@ export default async function HomePage() {
   if (!token) redirect('/login');
 
   let meetings: Meeting[];
+  let profile: Profile;
   try {
-    meetings = await fetchMeetings(token);
+    [meetings, profile] = await Promise.all([fetchMeetings(token), fetchProfile(token)]);
   } catch (err) {
     if (err instanceof UnauthorizedError) redirect('/api/auth/logout');
     throw err;
   }
 
-  const email = emailFromToken(token);
   const recent = meetings.slice(0, 3);
 
   return (
@@ -57,19 +65,14 @@ export default async function HomePage() {
       <div className="mx-auto w-full max-w-3xl flex flex-col gap-8 py-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div
-              className="flex items-center justify-center w-11 h-11 rounded-xl shrink-0 text-[var(--accent-foreground)]"
-              style={{ background: 'var(--accent)' }}
-            >
-              <VideoIcon />
-            </div>
+            <Avatar username={profile.username} />
             <div className="min-w-0">
               <h1 className="text-xl font-bold">Video Meetings</h1>
               <p
                 className="text-sm break-all"
                 style={{ color: 'color-mix(in oklch, var(--muted), black 25%)' }}
               >
-                Signed in as <span style={{ color: 'var(--foreground)' }}>{email}</span>
+                Signed in as <span style={{ color: 'var(--foreground)' }}>{profile.username}</span>
               </p>
             </div>
           </div>

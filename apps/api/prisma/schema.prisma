@@ -8,12 +8,16 @@ datasource db {
 }
 
 model User {
-  id        Int       @id @default(autoincrement())
-  email     String    @unique
-  password  String
-  meetings  Meeting[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id         Int       @id @default(autoincrement())
+  email      String    @unique
+  /// Case-insensitive (citext): "Alice" and "alice" collide.
+  username   String    @unique @db.Citext
+  password   String
+  /// Path of the avatar file relative to UPLOAD_DIR; null when the user has no avatar.
+  avatarPath String?
+  meetings   Meeting[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 model Meeting {
