@@ -12,6 +12,8 @@ export interface FileStorage {
   saveTemp(stream: Readable): Promise<TempFile>;
   /** Moves a temp file into its final place and returns the path relative to the upload root. */
   commit(tempPath: string, meetingId: number, fileId: string): Promise<string>;
+  /** Moves a temp file to `avatars/{userId}/{fileId}.{ext}` and returns the path relative to the upload root. */
+  commitAvatar(tempPath: string, userId: number, fileId: string, ext: string): Promise<string>;
   /** Removes a path (relative to the upload root, or an absolute temp path). Missing is fine. */
   remove(path: string): Promise<void>;
 }
