@@ -21,6 +21,11 @@ describe('fetchProfile', () => {
     await expect(fetchProfile('tok')).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
+  it('throws UnauthorizedError on 404 (the token outlived its user)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 404 })));
+    await expect(fetchProfile('tok')).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+
   it('throws on other failures', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 500 })));
     await expect(fetchProfile('tok')).rejects.toThrow('Failed to load profile');

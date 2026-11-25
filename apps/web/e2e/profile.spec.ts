@@ -46,6 +46,7 @@ test('a duplicate username (different case) shows an error and keeps the input',
   await page.goto('/profile');
   const attempt = `taken_${stamp}`;
   await saveUsername(page, attempt);
-  await expect(page.getByRole('alert')).toBeVisible();
+  // Scoped by id: Next's route announcer also exposes a role="alert" in an open shadow root.
+  await expect(page.locator('#username-error')).toHaveText('Username is already taken');
   await expect(page.getByLabel('Username')).toHaveValue(attempt);
 });

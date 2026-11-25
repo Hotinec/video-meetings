@@ -97,4 +97,12 @@ describe('PATCH /api/users/me', () => {
     fetchMock.mockRejectedValue(new Error('down'));
     expect((await patch('{}')).status).toBe(502);
   });
+
+  it('rejects an oversized body with 413 without calling the API', async () => {
+    getToken.mockResolvedValue('jwt');
+    const res = await patch(JSON.stringify({ username: 'x'.repeat(10_000) }));
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ message: 'Request body too large' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

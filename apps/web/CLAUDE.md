@@ -37,7 +37,8 @@ src/
   components/    # shared UI (icons, AuthShell, SectionCard, LogoutButton, FilesPanel)
   lib/           # session.ts (cookie + API_URL), auth-proxy.ts, auth.ts (client calls), meetings.ts,
                  # files-proxy.ts (server: forwards to the API with the cookie's JWT), meeting-files.ts (browser client),
-                 # file-rules.ts (allowlist + size cap), file-kind.ts (icon kind), meeting-id.ts
+                 # file-rules.ts (allowlist + size cap), file-kind.ts (icon kind), meeting-id.ts,
+                 # username-rules.ts (mirrors the API's username rules; change both together), users.ts (fetchProfile: 401/404 -> logout)
   middleware.ts  # redirects to /login when the `token` cookie is missing (matches /, /meetings/* and /profile)
 e2e/             # Playwright specs (profile.spec.ts: /profile redirect, username update, duplicate); config in playwright.config.ts
 vitest.config.mts, vitest.setup.ts  # test config (jsdom, `@` alias, jest-dom matchers)

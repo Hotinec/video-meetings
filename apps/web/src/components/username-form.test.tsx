@@ -73,6 +73,31 @@ describe('UsernameForm', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  it('sends the user through logout when the session has expired (401)', async () => {
+    const user = userEvent.setup();
+    const assign = vi.fn();
+    vi.stubGlobal('location', { assign });
+    fetchMock.mockReturnValue(reply(401, { message: 'Unauthorized' }));
+    render(<UsernameForm username="alice" />);
+    const input = screen.getByLabelText('Username');
+    await user.clear(input);
+    await user.type(input, 'bob');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/api/auth/logout'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('skips the round trip when the username is unchanged', async () => {
+    const user = userEvent.setup();
+    render(<UsernameForm username="alice" />);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/saved/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   it('disables the button while saving', async () => {
     const user = userEvent.setup();
     let resolve!: (r: Response) => void;

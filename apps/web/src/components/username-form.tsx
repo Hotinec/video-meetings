@@ -3,14 +3,14 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Form, Input, Label, Spinner } from '@heroui/react';
+import { USERNAME_PATTERN, USERNAME_RULE_MESSAGE } from '@/lib/username-rules';
 
-const USERNAME_RULE = /^[A-Za-z0-9_-]{3,30}$/;
-const RULE_MESSAGE = 'Use 3–30 characters: letters, digits, _ or -.';
 const DANGER_TEXT = 'color-mix(in oklch, var(--danger), black 45%)';
 
 export function UsernameForm({ username }: { username: string }) {
   const router = useRouter();
   const [value, setValue] = useState(username);
+  const [current, setCurrent] = useState(username);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -19,11 +19,15 @@ export function UsernameForm({ username }: { username: string }) {
     e.preventDefault();
     setSaved(false);
     const next = value.trim();
-    if (!USERNAME_RULE.test(next)) {
-      setError(RULE_MESSAGE);
+    if (!USERNAME_PATTERN.test(next)) {
+      setError(USERNAME_RULE_MESSAGE);
       return;
     }
     setError(null);
+    if (next === current) {
+      setSaved(true);
+      return;
+    }
     setIsLoading(true);
     try {
       const res = await fetch('/api/users/me', {
@@ -31,6 +35,11 @@ export function UsernameForm({ username }: { username: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: next }),
       });
+      if (res.status === 401) {
+        // The cookie expired after the page loaded: log out and return to /login.
+        window.location.assign('/api/auth/logout');
+        return;
+      }
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         const message = Array.isArray(body?.message) ? body.message[0] : body?.message;
@@ -42,7 +51,9 @@ export function UsernameForm({ username }: { username: string }) {
         return;
       }
       const updated = await res.json().catch(() => null);
-      setValue(typeof updated?.username === 'string' ? updated.username : next);
+      const saved = typeof updated?.username === 'string' ? updated.username : next;
+      setValue(saved);
+      setCurrent(saved);
       setSaved(true);
       router.refresh();
     } catch {
