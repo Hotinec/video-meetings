@@ -88,6 +88,34 @@ describe('UsernameForm', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('also logs out when the user is gone (404)', async () => {
+    const user = userEvent.setup();
+    const assign = vi.fn();
+    vi.stubGlobal('location', { assign });
+    fetchMock.mockReturnValue(reply(404, { message: 'User not found' }));
+    render(<UsernameForm username="alice" />);
+    const input = screen.getByLabelText('Username');
+    await user.clear(input);
+    await user.type(input, 'bob');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/api/auth/logout'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('compares against the server-provided prop, not a stale local copy', async () => {
+    const user = userEvent.setup();
+    fetchMock.mockReturnValue(reply(200, { username: 'alice' }));
+    // The page re-rendered with a new prop (e.g. changed in another tab, then refreshed).
+    render(<UsernameForm username="bob" />);
+    const input = screen.getByLabelText('Username');
+    await user.clear(input);
+    await user.type(input, 'alice');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  });
+
   it('skips the round trip when the username is unchanged', async () => {
     const user = userEvent.setup();
     render(<UsernameForm username="alice" />);

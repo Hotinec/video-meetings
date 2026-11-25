@@ -10,7 +10,6 @@ const DANGER_TEXT = 'color-mix(in oklch, var(--danger), black 45%)';
 export function UsernameForm({ username }: { username: string }) {
   const router = useRouter();
   const [value, setValue] = useState(username);
-  const [current, setCurrent] = useState(username);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -24,7 +23,8 @@ export function UsernameForm({ username }: { username: string }) {
       return;
     }
     setError(null);
-    if (next === current) {
+    // `username` is the server's value; router.refresh() after a save re-renders with the new one.
+    if (next === username) {
       setSaved(true);
       return;
     }
@@ -35,8 +35,8 @@ export function UsernameForm({ username }: { username: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: next }),
       });
-      if (res.status === 401) {
-        // The cookie expired after the page loaded: log out and return to /login.
+      if (res.status === 401 || res.status === 404) {
+        // The cookie expired, or its user is gone: log out and return to /login.
         window.location.assign('/api/auth/logout');
         return;
       }
@@ -51,9 +51,7 @@ export function UsernameForm({ username }: { username: string }) {
         return;
       }
       const updated = await res.json().catch(() => null);
-      const saved = typeof updated?.username === 'string' ? updated.username : next;
-      setValue(saved);
-      setCurrent(saved);
+      setValue(typeof updated?.username === 'string' ? updated.username : next);
       setSaved(true);
       router.refresh();
     } catch {

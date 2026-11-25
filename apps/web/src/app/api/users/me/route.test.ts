@@ -98,6 +98,30 @@ describe('PATCH /api/users/me', () => {
     expect((await patch('{}')).status).toBe(502);
   });
 
+  it('stops reading a chunked body (no Content-Length) at the cap', async () => {
+    getToken.mockResolvedValue('jwt');
+    let pulled = 0;
+    const chunk = new Uint8Array(1024).fill(120);
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        if (pulled > 100) return controller.close();
+        controller.enqueue(chunk);
+      },
+    });
+    const res = await PATCH(
+      new Request('http://web.test/api/users/me', {
+        method: 'PATCH',
+        body,
+        duplex: 'half',
+      } as RequestInit),
+    );
+
+    expect(res.status).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(pulled).toBeLessThan(20); // cancelled early, not buffered to the end
+  });
+
   it('rejects an oversized body with 413 without calling the API', async () => {
     getToken.mockResolvedValue('jwt');
     const res = await patch(JSON.stringify({ username: 'x'.repeat(10_000) }));
