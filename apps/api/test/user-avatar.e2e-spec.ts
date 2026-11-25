@@ -147,6 +147,30 @@ describe('POST /users/me/avatar (e2e)', () => {
       .expect(400);
   });
 
+  it("does not let a user change another user's avatar", async () => {
+    await send(PNG, 'a.png', 'image/png').expect(201);
+    const before = (await prisma.user.findUniqueOrThrow({ where: { id: userId } })).avatarPath;
+
+    const other = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email: 'avatar-other@example.com', password: 'password123' });
+    const otherId = (
+      await prisma.user.findUniqueOrThrow({ where: { email: 'avatar-other@example.com' } })
+    ).id;
+    const res = await send(JPEG, 'o.jpg', 'image/jpeg', other.body.token).expect(201);
+
+    expect(res.body.id).toBe(otherId);
+    expect(res.body.avatarUrl).toBe(`/users/${otherId}/avatar`);
+    const owner = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    expect(owner.avatarPath).toBe(before);
+    expect(existsSync(join(uploadDir, before!))).toBe(true);
+    await request(app.getHttpServer())
+      .post(`/users/${userId}/avatar`)
+      .set('Authorization', `Bearer ${other.body.token}`)
+      .attach('file', JPEG, { filename: 'x.jpg', contentType: 'image/jpeg' })
+      .expect(404);
+  });
+
   it('returns 401 without a token', async () => {
     await send(PNG, 'me.png', 'image/png', null).expect(401);
   });
