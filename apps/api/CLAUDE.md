@@ -72,7 +72,7 @@ src/
   users/            # user creation + lookup; exports CqrsModule so callers share the bus
     commands/       # CreateUserCommand (hashes password, persists user), UpdateUsernameCommand
     queries/        # FindUserByEmailQuery, GetCurrentUserQuery
-    users.controller.ts  # GET + PATCH /users/me (JWT) — wired by UsersApiModule
+    users.controller.ts  # /users/me (GET, PATCH, password, avatar) and GET /users/:id/avatar (JWT) — wired by UsersApiModule
   meeting/          # CRUD meetings, all routes require JWT
     commands/       # CreateMeetingCommand
     queries/        # GetMeetingsQuery, GetMeetingByIdQuery
@@ -92,7 +92,7 @@ prisma/             # schema.prisma + migrations (config: prisma7.config.ts). `U
 
 ### AppModule (`app.module.ts`)
 
-Root module. Imports `AuthModule`, `MeetingModule` and `FilesModule`. Does not import `UsersModule` directly — it is pulled in transitively via `AuthModule`.
+Root module. Imports `AuthModule`, `MeetingModule`, `FilesModule` and `UsersApiModule` (the `/users` HTTP surface). Does not import `UsersModule` directly — it is pulled in transitively via `AuthModule`.
 
 ### UsersModule (`users/`)
 
@@ -179,6 +179,8 @@ Upload validation (all failures are 400 and leave nothing on disk): an early nam
 AppModule
 ├── AuthModule
 │   └── UsersModule   (user data; Auth calls its handlers via QueryBus/CommandBus)
+├── UsersApiModule
+│   └── AuthModule    (JWT guard; `/users` controller, avatar storage)
 ├── MeetingModule
 │   └── AuthModule    (re-used for JwtModule + guards)
 └── FilesModule
@@ -245,7 +247,8 @@ Every module that uses the bus must import `CqrsModule` and list all handlers in
 ## Configuration
 
 - `UPLOAD_DIR` — upload root, default `./uploads` (gitignored, created at startup)
-- `MAX_UPLOAD_BYTES` — per-file size cap, default 100 MB
+- `MAX_UPLOAD_BYTES` — per-file size cap, default 100 MB (meeting files only; avatars are fixed at 5 MB)
+- Avatars are stored under `UPLOAD_DIR/avatars/{userId}/{uuid}.{ext}`; `User.avatarPath` holds the path relative to `UPLOAD_DIR`
 
 ## Notes
 
