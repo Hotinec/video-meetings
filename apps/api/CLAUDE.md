@@ -34,6 +34,7 @@ All tests are e2e (no unit tests). They boot the full NestJS app against a real 
 - `user-username-migration.e2e-spec.ts` — applies the migrations to a scratch database (`video_meetings_migration_test`, created and dropped by the test), inserts users, runs the username migration and checks the backfilled usernames are unique
 - `user-avatar.e2e-spec.ts` — `POST /users/me/avatar` (valid jpg/png/webp, replacement deletes the old file, DB failure leaves no orphan, wrong type, spoofed content, over 5 MB, no file, 401; temporary `UPLOAD_DIR`)
 - `user-avatar-get.e2e-spec.ts` — `GET /users/:id/avatar` (streams with the right `Content-Type`, `avatarUrl` points to it, 404 without avatar or unknown user, 401)
+- `users-me-isolation.e2e-spec.ts` — `/users/me` endpoints (PATCH, password, avatar) only change the token user, ignore a victim id/email in the body, and there is no by-id modify route (404)
 - `meeting-files.e2e-spec.ts` — file upload, list, download and delete (uses a temporary `UPLOAD_DIR`)
 - `meeting-files-flow.e2e-spec.ts` — the PRD's end-to-end story in one test: upload → list → download → delete (host only), plus the 400 cases
 
