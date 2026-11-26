@@ -47,6 +47,16 @@ Users can attach files to a meeting (video, audio and office documents; 100 MB p
 - **Storage:** files live on local disk under `UPLOAD_DIR` (default `apps/api/uploads/`, gitignored, created at API startup) as `meetings/{meetingId}/{fileId}`; metadata is in the `MeetingFile` table. `MAX_UPLOAD_BYTES` overrides the size cap. The web app's client-side checks (`apps/web/src/lib/file-rules.ts`) mirror these defaults, so change both together.
 - **Product docs:** the PRD and phased plan are in `docs/prd-meeting-file-upload.md` and `docs/plan-prd-meeting-file-upload.md`.
 
+## User profile
+
+Logged-in users edit their profile on `/profile` (linked from the avatar/name block on the home page, which shows the username and avatar instead of the email).
+
+- **API** (`apps/api/src/users/`): `GET` and `PATCH /users/me` (username: 3–30 chars, letters/digits/`_`/`-`, unique case-insensitive; 400 invalid, 409 taken), `POST /users/me/password` (old password required; 401 wrong, 400 unchanged/invalid; 204), `POST /users/me/avatar` (JPEG/PNG/WebP, 5 MB, type verified from content) and `GET /users/:id/avatar`. The user always comes from the JWT, never from the body or URL. See `apps/api/CLAUDE.md`.
+- **Web** (`apps/web`): `/profile` has the avatar form (preview, client-side checks), username form, password form and read-only email; it redirects to `/login` without a token. Same-origin proxy routes under `app/api/users/` add the JWT from the cookie (the avatar GET proxy lets `<img>` work). See `apps/web/CLAUDE.md`.
+- **Data model:** `User.username` (unique, case-insensitive via Postgres `citext`; the migration backfills existing users from the email local part) and nullable `User.avatarPath` (relative to `UPLOAD_DIR`).
+- **Storage:** avatars live under `UPLOAD_DIR` as `avatars/{userId}/{uuid}.{ext}`; replacing an avatar deletes the old file. The web client-side checks (`apps/web/src/lib/avatar-rules.ts`, `username-rules.ts`) mirror the API rules, so change both together.
+- **Product docs:** `docs/prd-user-profile-editing.md` and `docs/plan-prd-user-profile-editing.md`.
+
 ## Tech Stack
 
 - **Monorepo**: NPM workspaces

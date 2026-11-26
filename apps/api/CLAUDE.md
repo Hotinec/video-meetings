@@ -34,6 +34,7 @@ All tests are e2e (no unit tests). They boot the full NestJS app against a real 
 - `user-username-migration.e2e-spec.ts` — applies the migrations to a scratch database (`video_meetings_migration_test`, created and dropped by the test), inserts users, runs the username migration and checks the backfilled usernames are unique
 - `user-avatar.e2e-spec.ts` — `POST /users/me/avatar` (valid jpg/png/webp, replacement deletes the old file, DB failure leaves no orphan, wrong type, spoofed content, over 5 MB, no file, 401; temporary `UPLOAD_DIR`)
 - `user-avatar-get.e2e-spec.ts` — `GET /users/:id/avatar` (streams with the right `Content-Type`, `avatarUrl` points to it, 404 without avatar or unknown user, 401)
+- `users-me-isolation.e2e-spec.ts` — `/users/me` endpoints (PATCH, password, avatar) only change the token user, ignore a victim id/email in the body, and there is no by-id modify route (404)
 - `meeting-files.e2e-spec.ts` — file upload, list, download and delete (uses a temporary `UPLOAD_DIR`)
 - `meeting-files-flow.e2e-spec.ts` — the PRD's end-to-end story in one test: upload → list → download → delete (host only), plus the 400 cases
 
@@ -71,7 +72,7 @@ src/
   users/            # user creation + lookup; exports CqrsModule so callers share the bus
     commands/       # CreateUserCommand (hashes password, persists user), UpdateUsernameCommand
     queries/        # FindUserByEmailQuery, GetCurrentUserQuery
-    users.controller.ts  # GET + PATCH /users/me (JWT) — wired by UsersApiModule
+    users.controller.ts  # /users/me (GET, PATCH, password, avatar) and GET /users/:id/avatar (JWT) — wired by UsersApiModule
   meeting/          # CRUD meetings, all routes require JWT
     commands/       # CreateMeetingCommand
     queries/        # GetMeetingsQuery, GetMeetingByIdQuery
@@ -91,7 +92,7 @@ prisma/             # schema.prisma + migrations (config: prisma7.config.ts). `U
 
 ### AppModule (`app.module.ts`)
 
-Root module. Imports `AuthModule`, `MeetingModule` and `FilesModule`. Does not import `UsersModule` directly — it is pulled in transitively via `AuthModule`.
+Root module. Imports `AuthModule`, `MeetingModule`, `FilesModule` and `UsersApiModule` (the `/users` HTTP surface). Does not import `UsersModule` directly — it is pulled in transitively via `AuthModule`.
 
 ### UsersModule (`users/`)
 
@@ -178,6 +179,8 @@ Upload validation (all failures are 400 and leave nothing on disk): an early nam
 AppModule
 ├── AuthModule
 │   └── UsersModule   (user data; Auth calls its handlers via QueryBus/CommandBus)
+├── UsersApiModule
+│   └── AuthModule    (JWT guard; `/users` controller, avatar storage)
 ├── MeetingModule
 │   └── AuthModule    (re-used for JwtModule + guards)
 └── FilesModule
@@ -244,7 +247,8 @@ Every module that uses the bus must import `CqrsModule` and list all handlers in
 ## Configuration
 
 - `UPLOAD_DIR` — upload root, default `./uploads` (gitignored, created at startup)
-- `MAX_UPLOAD_BYTES` — per-file size cap, default 100 MB
+- `MAX_UPLOAD_BYTES` — per-file size cap, default 100 MB (meeting files only; avatars are fixed at 5 MB)
+- Avatars are stored under `UPLOAD_DIR/avatars/{userId}/{uuid}.{ext}`; `User.avatarPath` holds the path relative to `UPLOAD_DIR`
 
 ## Notes
 
