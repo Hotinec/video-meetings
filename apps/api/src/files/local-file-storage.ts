@@ -36,6 +36,19 @@ export class LocalFileStorage implements FileStorage, OnModuleInit {
     return relativePath;
   }
 
+  async commitAvatar(
+    tempPath: string,
+    userId: number,
+    fileId: string,
+    ext: string,
+  ): Promise<string> {
+    const relativePath = join('avatars', String(userId), `${fileId}.${ext}`);
+    const finalPath = join(getUploadDir(), relativePath);
+    await mkdir(dirname(finalPath), { recursive: true });
+    await rename(tempPath, finalPath);
+    return relativePath;
+  }
+
   async remove(path: string): Promise<void> {
     await rm(isAbsolute(path) ? path : join(getUploadDir(), path), { force: true });
   }
