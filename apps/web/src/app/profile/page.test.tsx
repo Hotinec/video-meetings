@@ -55,4 +55,19 @@ describe('/profile page', () => {
     expect(screen.getByText('alice@example.com')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /back/i })).toHaveAttribute('href', '/');
   });
+
+  it('shows the avatar image when the user has one', async () => {
+    getToken.mockResolvedValue('jwt');
+    fetchProfile.mockResolvedValue({
+      id: 4,
+      email: 'a@example.com',
+      username: 'alice',
+      avatarUrl: '/users/4/avatar',
+    });
+    render(await ProfilePage());
+    expect(screen.getByRole('img', { name: 'Avatar of alice' })).toHaveAttribute(
+      'src',
+      '/api/users/4/avatar',
+    );
+  });
 });

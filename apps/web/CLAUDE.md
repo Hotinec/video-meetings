@@ -27,12 +27,14 @@ npm run test:e2e # Playwright e2e (e2e/); needs web :3000 and API :3001 running.
 src/
   app/           # App Router pages and layouts
     page.tsx     # home "/" — server component, requires login: shows the API profile's username with an initials avatar, latest 3 + all meetings, Log Out
-    profile/     # "/profile" (server component): avatar placeholder, username, read-only email; redirects to /login without a token
+    profile/     # "/profile" (server component): avatar placeholder, avatar form (`AvatarForm`: file picker, blob preview, type/size check via `lib/avatar-rules.ts` mirroring the API, loading/error/success states; the old avatar stays on error), username, read-only email; redirects to /login without a token
     login/       # login page
     signup/      # registration page
     meetings/[id]/ # meeting page (server component): title, date and the Files section
     api/auth/    # route handlers (login, register, logout) that proxy to the API and manage the cookie
     api/users/me/  # proxy route: GET the current user's profile, PATCH to update the username (adds the cookie JWT)
+    api/users/me/avatar/  # proxy route: POST avatar upload (streams the multipart body; 413 above 6 MB declared)
+    api/users/[id]/avatar/  # proxy route: GET the avatar image (cookie JWT added, so it works in an <img>; `Cache-Control: private, no-cache`; 404 for invalid ids)
     api/meetings/[id]/files/  # proxy routes: GET list, POST upload (streams the body), [fileId] DELETE, [fileId]/download
   components/    # shared UI (icons, AuthShell, SectionCard, LogoutButton, FilesPanel)
   lib/           # session.ts (cookie + API_URL), auth-proxy.ts, auth.ts (client calls), meetings.ts,
@@ -40,7 +42,7 @@ src/
                  # file-rules.ts (allowlist + size cap), file-kind.ts (icon kind), meeting-id.ts,
                  # username-rules.ts (mirrors the API's username rules; change both together), users.ts (fetchProfile: 401/404 -> logout)
   middleware.ts  # redirects to /login when the `token` cookie is missing (matches /, /meetings/* and /profile)
-e2e/             # Playwright specs (profile.spec.ts: /profile redirect, username update, duplicate); config in playwright.config.ts
+e2e/             # Playwright specs (profile.spec.ts: /profile redirect, username update, duplicate; avatar.spec.ts: avatar upload shown on /profile and home, invalid type keeps the old avatar); config in playwright.config.ts
 vitest.config.mts, vitest.setup.ts  # test config (jsdom, `@` alias, jest-dom matchers)
 ```
 
@@ -48,7 +50,7 @@ vitest.config.mts, vitest.setup.ts  # test config (jsdom, `@` alias, jest-dom ma
 
 - The API's JWT is stored in an **httpOnly, SameSite=Lax cookie** (`token`, 7 days, `Secure` in production) set by the Next route handlers in `app/api/auth/*`. It is never exposed to client JS or localStorage.
 - Server components read the cookie and call the API (`API_URL`, defaults to `http://localhost:3001`) with `Authorization: Bearer`. A 401 from the API sends the user through `GET /api/auth/logout`, which clears the cookie and redirects to `/login`.
-- The home page fetches the profile (`lib/users.ts` `fetchProfile`, `GET /users/me`) and shows the username with an initials `Avatar` placeholder. The JWT is only decoded for the user id (`userIdFromToken`), for display decisions; the API verifies the signature.
+- The home page fetches the profile (`lib/users.ts` `fetchProfile`, `GET /users/me`) and shows the username with the `Avatar` (the image from `/api/users/:id/avatar` when `avatarUrl` is set, else an initials placeholder; same on `/profile`). The JWT is only decoded for the user id (`userIdFromToken`), for display decisions; the API verifies the signature.
 
 ## Meeting files
 
