@@ -30,6 +30,7 @@ All tests are e2e (no unit tests). They boot the full NestJS app against a real 
 - `auth.e2e-spec.ts` — registration and login endpoints
 - `meetings.e2e-spec.ts` — meeting CRUD endpoints (JWT-protected)
 - `users.e2e-spec.ts` — `GET /users/me` (200 fields, 401 without/invalid token, 404 for a deleted user) and `PATCH /users/me` (200, 400 invalid, 409 duplicate with different case, 401)
+- `user-password.e2e-spec.ts` — `POST /users/me/password` (204 and login with only the new password, bcrypt hash stored, 401 wrong old, 400 same/empty/missing/non-string, hash unchanged on failure, 401 without token, 404 deleted user)
 - `user-username-migration.e2e-spec.ts` — applies the migrations to a scratch database (`video_meetings_migration_test`, created and dropped by the test), inserts users, runs the username migration and checks the backfilled usernames are unique
 - `user-avatar.e2e-spec.ts` — `POST /users/me/avatar` (valid jpg/png/webp, replacement deletes the old file, DB failure leaves no orphan, wrong type, spoofed content, over 5 MB, no file, 401; temporary `UPLOAD_DIR`)
 - `user-avatar-get.e2e-spec.ts` — `GET /users/:id/avatar` (streams with the right `Content-Type`, `avatarUrl` points to it, 404 without avatar or unknown user, 401)
@@ -106,6 +107,7 @@ Commands and queries:
 
 - `CreateUserCommand(email, password)` → hashes password with bcrypt, derives a unique username from the email local part (`users/username.ts`: lowercased, invalid chars → `_`, padded to 3, max 30, numeric suffix on collision; retries on a concurrent-signup race), creates row, returns `User`
 - `UpdateUsernameCommand(userId, username)` → updates only the token user's username (DTO: 3–30 chars, letters/digits/`_`/`-`, else 400; `409` if taken, case-insensitive via citext); returns the profile view (both handlers build it with `toUserProfileView` in `users/user-profile.view.ts`, the single place a `User` row becomes a response)
+- `ChangePasswordCommand(userId, oldPassword, newPassword)` → `POST /users/me/password` (JSON `{ oldPassword, newPassword }`, both non-empty strings like signup, else 400). `401` if the old password is wrong, `400` if the new one equals the old one, `404` if the user is gone; hashes with bcrypt (10 rounds, as at signup), returns `204` with no body. The hash is unchanged on any failure; passwords are never returned or logged.
 - `FindUserByEmailQuery(email)` → `prisma.user.findUnique`, returns `User | null`
 - `GetCurrentUserQuery(userId)` → `{ id, email, username, avatarUrl }` (`avatarUrl` is `/users/:id/avatar` or null; password/avatarPath never exposed), `NotFoundException` if the user is gone
 
@@ -115,7 +117,7 @@ Commands and queries:
 
 `GET /users/:id/avatar` (`GetUserAvatarQuery`, JWT required): streams the image with `Content-Type` derived from the stored extension and `X-Content-Type-Options: nosniff`; 404 for an unknown user, no avatar, or a missing disk file; 401 without a token.
 
-`UsersApiModule` (`users/users-api.module.ts`) holds `UsersController` (`GET` and `PATCH /users/me`, `POST /users/me/avatar`, `GET /users/:id/avatar`, `JwtAuthGuard`). It is separate from `UsersModule` because `AuthModule` imports `UsersModule` and the controller needs `AuthModule`'s JWT.
+`UsersApiModule` (`users/users-api.module.ts`) holds `UsersController` (`GET` and `PATCH /users/me`, `POST /users/me/password`, `POST /users/me/avatar`, `GET /users/:id/avatar`, `JwtAuthGuard`). It is separate from `UsersModule` because `AuthModule` imports `UsersModule` and the controller needs `AuthModule`'s JWT.
 
 ### AuthModule (`auth/`)
 
